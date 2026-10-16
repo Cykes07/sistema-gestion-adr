@@ -128,7 +128,10 @@ const getWorkflowForOrder = (order) => {
     // ese estado al flujo para que SIEMPRE tenga un siguiente paso y nunca quede trabada.
     if (order?.status && !pasos.includes(order.status) && ['PRODUCCION', 'VENTAS POR RETIRAR', 'CONTABILIDAD'].includes(order.status)) pasos.push(order.status);
     if (order?.status === 'POR COBRAR' || ordenPorCobrar(order)) pasos.push('POR COBRAR');
-    if (ordenNecesitaVerificacion(order)) pasos.push('VERIFICACIÓN');
+    // 🔧 Si TODOS los pagos no-efectivo ya los verificó el Admin (ej. el anticipo se verificó mientras producían),
+    // la orden ya NO pasa por VERIFICACIÓN: al cerrarla va directo a FINALIZADA. Si ya está en VERIFICACIÓN, el paso
+    // se mantiene para que siempre tenga salida. MISMA lógica en App.jsx y OrderDetailsModal.jsx.
+    if (order?.status === 'VERIFICACIÓN' || (ordenNecesitaVerificacion(order) && !todosPagosVerificados(order))) pasos.push('VERIFICACIÓN');
     pasos.push('FINALIZADA');
     return pasos;
 };
@@ -460,7 +463,7 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate }) 
                                            {usedMaterials.map(m => (
                                                <div key={m.id} className="flex items-center gap-2 text-xs">
                                                    <span className="flex-1 truncate font-medium text-slate-700" title={m.nombre}>{m.nombre}</span>
-                                                   <input type="number" min="0.01" step="0.01" className="w-16 border border-slate-300 rounded px-1 py-1 outline-none focus:border-blue-500 font-mono text-center bg-slate-50" value={m.cant_usada} onChange={e => updateMaterialQty(m.id, e.target.value)} />
+                                                   <input type="number" min="0.01" step="any" onWheel={e => e.currentTarget.blur()} title="Cantidad usada. Puedes escribir decimales si hace falta (ej. 0.5)." className="w-16 border border-slate-300 rounded px-1 py-1 outline-none focus:border-blue-500 font-mono text-center bg-slate-50" value={m.cant_usada} onChange={e => updateMaterialQty(m.id, e.target.value)} />
                                                    <span className="text-[10px] text-slate-500 w-10 truncate">{m.unidad}</span>
                                                    <button onClick={() => removeMaterial(m.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1 rounded transition-colors"><X className="w-3 h-3"/></button>
                                                </div>
@@ -526,6 +529,10 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
   const [showTimeline, setShowTimeline] = useState(true); // 🔧 NUEVO: abierta por defecto
   const { toast } = useToast();
   const [localProducts, setLocalProducts] = useState([]);
+  // 🔧 FIX "materiales prellenados de otra OP": se recuerda de qué orden son los productos locales; si todavía son
+  // de la orden anterior, se usan los de la orden actual. Y cada fila lleva la orden en su key, así se arma de cero.
+  const [localProductsOrderId, setLocalProductsOrderId] = useState(null);
+  const productosOrden = (order && localProductsOrderId === order.id) ? localProducts : (order?.productos || []);
   const [localVendedor, setLocalVendedor] = useState('');
   
   const [localImages, setLocalImages] = useState([]); 
@@ -551,6 +558,7 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
   useEffect(() => {
     if (order) {
       setLocalProducts(order.productos || []);
+      setLocalProductsOrderId(order.id);
       setLocalVendedor(order.vendedor || '');
       setIsAdvancing(false); 
       setPreviewImage(null);
@@ -600,9 +608,9 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
 
   const validSellers = useMemo(() => removeDuplicateUsers(getValidSellers(staffUsers)), [staffUsers]);
   const allProductsFinished = useMemo(() => {
-      if (!localProducts || localProducts.length === 0) return true;
-      return localProducts.every(p => p.estado_prod === 'FINALIZADO');
-  }, [localProducts]);
+      if (!productosOrden || productosOrden.length === 0) return true;
+      return productosOrden.every(p => p.estado_prod === 'FINALIZADO');
+  }, [productosOrden]);
 
   const rawFinancials = order?.financials || {};
   let parsedFinancials = rawFinancials;
@@ -697,7 +705,7 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
   };
 
   const handleProductUpdateLocal = async (idx, updatedProduct) => {
-      const newProducts = [...localProducts];
+      const newProducts = [...productosOrden];
       newProducts[idx] = updatedProduct;
       setLocalProducts(newProducts);
       try {
@@ -1068,10 +1076,10 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 bg-white">
-                                {localProducts.map((prod, idx) => (
-                                    <ProductProductionRow key={idx} product={prod} index={idx} order={order} user={user} onProductUpdate={handleProductUpdateLocal} />
+                                {productosOrden.map((prod, idx) => (
+                                    <ProductProductionRow key={`${order.id}-${idx}`} product={prod} index={idx} order={order} user={user} onProductUpdate={handleProductUpdateLocal} />
                                 ))}
-                                {(!localProducts || localProducts.length === 0) && (<tr><td colSpan={showFinancials ? "6" : "4"} className="px-4 py-8 text-center text-slate-400 italic">No hay productos registrados</td></tr>)}
+                                {(!productosOrden || productosOrden.length === 0) && (<tr><td colSpan={showFinancials ? "6" : "4"} className="px-4 py-8 text-center text-slate-400 italic">No hay productos registrados</td></tr>)}
                             </tbody>
                         </table>
                     </div>

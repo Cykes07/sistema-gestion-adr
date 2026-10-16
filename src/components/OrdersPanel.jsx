@@ -156,7 +156,7 @@ const OrdersPanel = ({
           // ('FINALIZADO'), materiales y sin_materiales de cada producto, y al pasar a Producción
           // ya salía "2/2 producidos" y no dejaba descontar nada del inventario.
           productos: Array.isArray(order.productos)
-              ? order.productos.map(({ estado_prod, materiales, sin_materiales, ...resto }) => resto)
+              ? order.productos.map(({ estado_prod, materiales, sin_materiales, materiales_borrador, sin_materiales_borrador, ...resto }) => resto) // 🔧 + borrador: la copia no hereda materiales de la otra OP
               : order.productos,
           materiales_usados: [],
           estado_produccion: 'Pendiente',

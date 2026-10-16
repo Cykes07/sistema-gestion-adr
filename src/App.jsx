@@ -109,7 +109,10 @@ const getWorkflowForOrder = (order) => {
     // ese estado al flujo para que SIEMPRE tenga un siguiente paso y nunca quede trabada.
     if (order?.status && !pasos.includes(order.status) && ['PRODUCCION', 'VENTAS POR RETIRAR', 'CONTABILIDAD'].includes(order.status)) pasos.push(order.status);
     if (order?.status === 'POR COBRAR' || ordenPorCobrar(order)) pasos.push('POR COBRAR');
-    if (ordenNecesitaVerificacion(order)) pasos.push('VERIFICACIÓN');
+    // 🔧 Si TODOS los pagos no-efectivo ya los verificó el Admin (ej. el anticipo se verificó mientras producían),
+    // la orden ya NO pasa por VERIFICACIÓN: al cerrarla va directo a FINALIZADA. Si ya está en VERIFICACIÓN, el paso
+    // se mantiene para que siempre tenga salida. MISMA lógica en App.jsx y OrderDetailsModal.jsx.
+    if (order?.status === 'VERIFICACIÓN' || (ordenNecesitaVerificacion(order) && !todosPagosVerificados(order))) pasos.push('VERIFICACIÓN');
     pasos.push('FINALIZADA');
     return pasos;
 };

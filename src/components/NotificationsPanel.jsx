@@ -66,6 +66,26 @@ const ordenTienePagoPorVerificar = (order) => {
     return pagosNoEfectivoRegistrados(order).some(p => !verificados[p.key]);
 };
 
+// 🔧 FINALIZAR SOLO: una orden en VERIFICACIÓN con TODOS sus pagos no-efectivo ya verificados (y sin saldo por cobrar)
+// no tiene nada pendiente para el Admin: se finaliza sola, sin esperar el clic en "Aprobar y Finalizar".
+const saldoPendienteDe = (order) => {
+    let fin = order?.financials || {};
+    if (typeof fin === 'string') { try { fin = JSON.parse(fin); } catch (e) { fin = {}; } }
+    const abonos = Array.isArray(order?.abonos) ? order.abonos : [];
+    const totalAbonos = abonos.reduce((acc, a) => acc + (Number(a.monto) || 0), 0);
+    const retencion = Number(order?.retencion || fin.retencion || 0);
+    return (Number(fin.total) || 0) - (Number(order?.anticipo) || 0) - retencion - totalAbonos;
+};
+// Devuelve null si la orden puede finalizarse sola; si no, el motivo (texto para mostrar).
+const motivoNoAutoFinaliza = (order) => {
+    if (!order || order.status !== 'VERIFICACIÓN') return 'no está en Verificación';
+    const verificados = order.pagos_verificados || {};
+    const faltan = construirPagosAVerificar(order).filter(p => !verificados[p.key]).length;
+    if (faltan > 0) return `faltan ${faltan} pago(s) por verificar`;
+    if (saldoPendienteDe(order) > 0.01) return 'todavía tiene saldo por cobrar';
+    return null;
+};
+
 // 🔧 CAMBIO 9: el aviso de "jornadas sin auditar" y toda la maquinaria de
 // "jornada pendiente de archivar" SOLO aplican desde esta fecha en adelante.
 // Antes de septiembre 2026 hubo muchos cambios seguidos al sistema y los días
@@ -237,6 +257,8 @@ const NotificationsPanel = ({
   const [guardandoPago, setGuardandoPago] = useState(null); // `${orderId}:${key}` que se está guardando
   const [finalizandoOrden, setFinalizandoOrden] = useState(null); // id de la orden que se está finalizando
   const [ordenesFinalizadasLocal, setOrdenesFinalizadasLocal] = useState([]); // ids ya finalizados desde aquí
+  const [finalizadasAuto, setFinalizadasAuto] = useState([]); // nº de las órdenes que se finalizaron solas en esta sesión
+  const autoFinalizadasPedidas = React.useRef(new Set()); // ids ya enviados a finalizar solos (no repetir)
   const [ordenesTocadas, setOrdenesTocadas] = useState([]); // ids con algún check marcado/desmarcado en esta sesión (siguen visibles aunque queden todos verificados)
   const [comprobantesVerif, setComprobantesVerif] = useState({}); // { [orderId]: comprobantes | null | 'error' }
   const [comprobantePreview, setComprobantePreview] = useState(null); // url de la foto abierta en grande
@@ -749,6 +771,8 @@ const NotificationsPanel = ({
       try {
           const { error } = await supabase.from('ordenes').update({ pagos_verificados: actualizado }).eq('id', order.id);
           if (error) throw error;
+          const ordenActualizada = { ...order, pagos_verificados: actualizado };
+          if (motivoNoAutoFinaliza(ordenActualizada) === null) finalizarOrdenVerificada(ordenActualizada, true);
       } catch (error) {
           setPagosVerifOverride(prev => ({ ...prev, [order.id]: actuales })); // revertir si falló
           alert('No se pudo guardar la verificación del pago: ' + error.message);
@@ -758,24 +782,44 @@ const NotificationsPanel = ({
   };
 
   // Aprueba y finaliza una orden en VERIFICACIÓN — solo si ya están todos los checks.
-  const finalizarOrdenVerificada = async (order) => {
-      const pagos = construirPagosAVerificar(order);
-      const faltan = pagos.filter(p => !(order.pagos_verificados || {})[p.key]);
-      if (faltan.length > 0) {
-          alert(`Faltan ${faltan.length} pago(s) por verificar en esta orden.`);
-          return;
+  // automatico = true: la llama el sistema (todo verificado), sin avisos emergentes; deja constancia arriba de la lista.
+  const finalizarOrdenVerificada = async (order, automatico = false) => {
+      if (automatico) {
+          if (motivoNoAutoFinaliza(order) !== null || autoFinalizadasPedidas.current.has(order.id)) return;
+          autoFinalizadasPedidas.current.add(order.id);
+      } else {
+          const pagos = construirPagosAVerificar(order);
+          const faltan = pagos.filter(p => !(order.pagos_verificados || {})[p.key]);
+          if (faltan.length > 0) {
+              alert(`Faltan ${faltan.length} pago(s) por verificar en esta orden.`);
+              return;
+          }
+          setFinalizandoOrden(order.id);
       }
-      setFinalizandoOrden(order.id);
       try {
-          const { error } = await supabase.from('ordenes').update({ status: 'FINALIZADA' }).eq('id', order.id);
+          // .eq('status', 'VERIFICACIÓN'): si otra persona ya la movió, no se pisa nada
+          const { error } = await supabase.from('ordenes').update({ status: 'FINALIZADA' }).eq('id', order.id).eq('status', 'VERIFICACIÓN');
           if (error) throw error;
           setOrdenesFinalizadasLocal(prev => [...prev, order.id]);
+          if (automatico) setFinalizadasAuto(prev => [...prev, String(order.orderNumber || order.order_number || order.id).padStart(7, '0')]);
       } catch (error) {
-          alert('No se pudo finalizar la orden: ' + error.message);
+          if (automatico) { autoFinalizadasPedidas.current.delete(order.id); console.error('No se pudo finalizar sola la orden', order.id, error); }
+          else alert('No se pudo finalizar la orden: ' + error.message);
       } finally {
-          setFinalizandoOrden(null);
+          if (!automatico) setFinalizandoOrden(null);
       }
   };
+
+  // 🔧 Órdenes que YA estaban en VERIFICACIÓN con todo verificado (de antes de este cambio, o verificadas desde otra
+  // computadora): al abrir el Centro de Notificaciones se finalizan solas, una vez cada una. Se mira lo GUARDADO en
+  // el servidor (no el check que se está guardando en este momento).
+  useEffect(() => {
+      if (!isAdmin) return;
+      const listas = (orders || []).filter(o => o.status === 'VERIFICACIÓN' && !ordenesFinalizadasLocal.includes(o.id)
+          && !autoFinalizadasPedidas.current.has(o.id) && motivoNoAutoFinaliza(o) === null);
+      if (listas.length === 0) return;
+      (async () => { for (const o of listas) await finalizarOrdenVerificada(o, true); })();
+  }, [isAdmin, orders]);
 
   // 🔧 CAMBIO 9: ¿están TODOS los checks del día? Recién ahí se habilita el botón
   // "Archivar Jornada" de arriba. Mientras falte algo, la jornada sale como
@@ -1110,6 +1154,12 @@ const NotificationsPanel = ({
                     {isAdmin && bandejaTab === 'verificacion' ? (
                         <>
                         <div className="divide-y divide-slate-100 max-h-[75vh] overflow-y-auto">
+                            {finalizadasAuto.length > 0 && (
+                                <div className="p-3 bg-green-50 border-b border-green-200 text-xs text-green-800 flex items-start gap-2">
+                                    <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                                    <span><strong>Finalizadas automáticamente</strong> (todos sus pagos ya estaban verificados): {finalizadasAuto.map(n => `#${n}`).join(', ')}</span>
+                                </div>
+                            )}
                             {ordenesEnVerificacion.length === 0 ? (
                                 <div className="p-12 text-center text-slate-400">
                                     <CheckCircle2 className="h-10 w-10 text-green-400 mx-auto mb-2" />
@@ -1181,7 +1231,7 @@ const NotificationsPanel = ({
                                         </div>
                                         {order.status !== 'VERIFICACIÓN' ? (
                                             <p className="text-[10px] text-slate-500 mt-2 text-right">
-                                                La orden sigue en <strong>{order.status}</strong>: revisa y marca los pagos ya. {order.status !== 'FINALIZADA' && 'El saldo (si es no efectivo) aparecerá aquí cuando Ventas cierre la orden.'}
+                                                La orden sigue en <strong>{order.status}</strong>: revisa y marca los pagos ya. {order.status !== 'FINALIZADA' && 'Cuando Ventas la cierre: si todo ya está verificado se finaliza sola; si el saldo es no efectivo, aparecerá aquí para verificarlo.'}
                                             </p>
                                         ) : (
                                         <div className="flex justify-end mt-2">
