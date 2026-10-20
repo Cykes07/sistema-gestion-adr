@@ -4,12 +4,17 @@
 // ===== REGLAS DE COMISIÓN (funciones puras) =====
 // "Finalizada" = FINALIZADA o ARCHIVADA. Fecha de cierre = fecha_pago_saldo || updated_at (no existe otra).
 
-// ¿La venta fue a crédito? (anticipo o saldo en "Crédito") — mismo criterio de texto que OrderDetailsModal.
+// ¿La venta fue a crédito? Sí si el anticipo o el saldo están en "Crédito", O si la orden tiene fecha de vencimiento
+// de crédito. 🔧 (19-oct, orden 1172) Al cobrar un crédito, Ventas suele cambiar la forma de pago del saldo de "Crédito"
+// a la forma en que realmente pagaron (ej. Transferencia) y la orden perdía el ciclo extra. La fecha de vencimiento
+// solo se puede poner eligiendo "Crédito" y el formulario nunca la borra: es la prueba de que fue venta a crédito.
 export const esVentaACredito = (o) => {
     const esCredito = (v) => { const t = String(v || '').toLowerCase(); return t.includes('crédit') || t.includes('credit'); };
+    const tieneFecha = (v) => String(v || '').trim() !== '';
     let fin = o?.financials;
     if (typeof fin === 'string') { try { fin = JSON.parse(fin); } catch (e) { fin = {}; } }
-    return esCredito(o?.formaPagoAnticipo || o?.forma_pago_anticipo) || esCredito(o?.formaPagoSaldo || fin?.formaPagoSaldo);
+    return esCredito(o?.formaPagoAnticipo || o?.forma_pago_anticipo) || esCredito(o?.formaPagoSaldo || fin?.formaPagoSaldo)
+        || tieneFecha(o?.creditoVenceAnticipo || o?.credito_vence_anticipo) || tieneFecha(o?.creditoVenceSaldo || fin?.creditoVenceSaldo);
 };
 
 // Regla normal: creada dentro del rango Y cerrada dentro del rango + margen de días.
