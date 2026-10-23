@@ -54,7 +54,7 @@ const getOrderAccountingStatus = (o) => {
     };
 };
 
-const Stats = ({ orders, user }) => {
+const Stats = ({ orders, user, vendedorSeleccionado, onCambiarVendedor }) => {
   // 🔥 REGLA DE SEGURIDAD: Producción NO ve las estadísticas del Dashboard 🔥
   if (user?.role === 'Producción') {
     return null;
@@ -65,7 +65,10 @@ const Stats = ({ orders, user }) => {
   // 🔧 NUEVO: filtro "ver solo este vendedor" — para cuadrar comisiones sin tener
   // que sumar a mano el desglose de cada tarjeta.
   const [staffList, setStaffList] = useState([]);
-  const [selectedVendedorId, setSelectedVendedorId] = useState('');
+  const [selectedVendedorInterno, setSelectedVendedorInterno] = useState('');
+  // 🔧 Si el Inicio maneja el vendedor elegido (para filtrar TAMBIÉN la tabla de órdenes), se usa ese; si no, el propio.
+  const selectedVendedorId = vendedorSeleccionado !== undefined ? vendedorSeleccionado : selectedVendedorInterno;
+  const setSelectedVendedorId = onCambiarVendedor || setSelectedVendedorInterno;
 
   useEffect(() => {
       if (!isAdmin) return;

@@ -262,6 +262,7 @@ const NotificationsPanel = ({
   const [ordenesTocadas, setOrdenesTocadas] = useState([]); // ids con algún check marcado/desmarcado en esta sesión (siguen visibles aunque queden todos verificados)
   const [comprobantesVerif, setComprobantesVerif] = useState({}); // { [orderId]: comprobantes | null | 'error' }
   const [comprobantePreview, setComprobantePreview] = useState(null); // url de la foto abierta en grande
+  const [fotoCierre, setFotoCierre] = useState(null); // 🔧 papeleta del cierre diario abierta en grande (cualquier día, también archivados)
   const comprobantesPedidos = React.useRef(new Set()); // ids ya pedidos (evita repetir la consulta cada 5s)
 
   // 🔧 FIX: esta función se había perdido en una edición anterior — es la que
@@ -957,7 +958,19 @@ const NotificationsPanel = ({
                                                 {comprobanteActual ? 'Comprobante Adjunto' : 'Sin comprobante'}
                                             </span>
                                             {comprobanteActual ? (
-                                                <img src={comprobanteActual} className="h-8 w-8 object-cover rounded border border-slate-300" alt="comprobante"/>
+                                                <>
+                                                    {/* 🔧 Antes era solo una miniatura sin clic: no se podía ver la papeleta de días anteriores. */}
+                                                    <button type="button" onClick={() => setFotoCierre(comprobanteActual)} title="Ver comprobante en grande" className="rounded border border-slate-300 overflow-hidden hover:ring-2 hover:ring-indigo-400 transition">
+                                                        <img src={comprobanteActual} className="h-8 w-8 object-cover" alt="comprobante"/>
+                                                    </button>
+                                                    {fotoCierre && createPortal(
+                                                        <div className="fixed inset-0 z-[200] bg-black/85 flex items-center justify-center p-4" onClick={() => setFotoCierre(null)}>
+                                                            <button type="button" className="absolute top-4 right-4 text-white p-2 bg-white/10 hover:bg-white/20 rounded-full" onClick={() => setFotoCierre(null)} title="Cerrar"><X className="h-7 w-7" /></button>
+                                                            <img src={fotoCierre} alt="Comprobante de depósito" className="max-w-full max-h-[92vh] rounded shadow-2xl" onClick={(e) => e.stopPropagation()} />
+                                                        </div>,
+                                                        document.body
+                                                    )}
+                                                </>
                                             ) : (
                                                 <label className="text-[10px] text-indigo-600 font-bold cursor-pointer hover:underline">
                                                     Subir <input type="file" accept="image/*" className="hidden" onChange={handleUploadComprobante}/>

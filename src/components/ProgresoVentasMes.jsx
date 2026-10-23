@@ -10,7 +10,7 @@ import { rangoDelMes, resumenVentasMes } from '@/utils/comisiones';
 // (utils/comisiones.js), incluido el margen de días y el ciclo extra del crédito, así ambas pantallas coinciden.
 const formatoUSD = (n) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const ProgresoVentasMes = ({ orders = [], user }) => {
+const ProgresoVentasMes = ({ orders = [], user, vistaDe }) => { // vistaDe: nombre del vendedor que el Admin eligió en "Comisiones — Ver"
   const esAdmin = user?.role === 'Administrador';
 
   // Mismo margen "Finalizadas (días)" que edita el Admin en Estadísticas (configuracion_global)
@@ -47,12 +47,12 @@ const ProgresoVentasMes = ({ orders = [], user }) => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
-            Ventas Finalizadas ({nombreMes}){esAdmin ? ' · Toda la empresa' : ''}
+            Ventas Finalizadas ({nombreMes}){vistaDe ? ` · ${vistaDe}` : esAdmin ? ' · Toda la empresa' : ''}
           </p>
 
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <p className="text-3xl md:text-4xl font-black text-blue-700">{formatoUSD(r.propias)} USD</p>
-            <p className="text-base md:text-lg font-semibold text-slate-400">/ {formatoUSD(r.totalSales)} USD Meta Vendida</p>
+            <p className="text-3xl md:text-4xl font-black text-slate-700">/ {formatoUSD(r.totalSales)} USD <span className="text-base md:text-lg font-bold text-slate-500">Vendido</span></p>
           </div>
 
           <div className="flex items-center gap-3 mt-2">

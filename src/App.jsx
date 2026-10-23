@@ -197,6 +197,7 @@ function App() {
   const [paymentOrder, setPaymentOrder] = useState(null);
   const [cloningOrder, setCloningOrder] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
+  const [vendedorVista, setVendedorVista] = useState(''); // 🔧 Inicio del Admin: vendedor elegido en "Comisiones — Ver" ('' = toda la empresa)
   const [abonoOrder, setAbonoOrder] = useState(null);
   const [viewOrderSource, setViewOrderSource] = useState(null);
 
@@ -773,6 +774,10 @@ function App() {
 
     switch (currentView) {
       case 'inicio': {
+        // 🔧 Si el Admin eligió un vendedor en "Comisiones — Ver", la tarjeta de ventas, las 6 tarjetas y la tabla de órdenes
+        // se ven exactamente como el portal de ese vendedor (solo sus órdenes). Las acciones (abrir orden, cobrar) siguen siendo del Admin.
+        const vendedorSel = user.role === 'Administrador' && vendedorVista ? (staffUsers || []).find(u => u.id === vendedorVista) : null;
+        const usuarioVista = vendedorSel ? { id: vendedorSel.id, name: vendedorSel.name, role: 'Vendedor' } : user;
         return (
           <div className="space-y-6 animate-in fade-in">
             <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -798,11 +803,11 @@ function App() {
             {/* 🔧 FIX: la tarjeta de Ventas Finalizadas (tema de comisiones) tampoco
                 debe verse en el portal de Producción. */}
             {user.role !== 'Producción' && (
-                <ProgresoVentasMes orders={orders} user={user} />
+                <ProgresoVentasMes orders={orders} user={usuarioVista} vistaDe={vendedorSel ? vendedorSel.name : undefined} />
             )}
 
-            <Stats orders={orders} user={user} />
-            <div className="mt-8"><WorkAreaList orders={orders} user={user} staffUsers={staffUsers} kanbanTasks={kanbanTasks} onKanbanUpdate={handleKanbanUpdate} onKanbanCreate={handleKanbanCreate} onKanbanDelete={handleKanbanDelete} onViewOrder={(o) => handleViewOrder(o, 'tasks')} initialMode='list' onAbonoOrder={handleAbonoOrderRequest} /></div>
+            <Stats orders={orders} user={user} vendedorSeleccionado={vendedorVista} onCambiarVendedor={setVendedorVista} />
+            <div className="mt-8"><WorkAreaList key={vendedorSel ? `vista-${vendedorSel.id}` : 'global'} orders={orders} user={usuarioVista} staffUsers={staffUsers} kanbanTasks={kanbanTasks} onKanbanUpdate={handleKanbanUpdate} onKanbanCreate={handleKanbanCreate} onKanbanDelete={handleKanbanDelete} onViewOrder={(o) => handleViewOrder(o, 'tasks')} initialMode='list' onAbonoOrder={handleAbonoOrderRequest} /></div>
           </div>
         );
       }
