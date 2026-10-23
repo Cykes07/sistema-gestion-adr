@@ -1,4 +1,9 @@
 /** @type {import('tailwindcss').Config} */
+// 🔧 Configuración de la Empresa: las familias blue (color principal) e indigo (acentos) salen de variables CSS
+// (--tema-blue-600, etc.). Por defecto valen lo mismo que en Tailwind (ver src/index.css); el tema elegido las cambia.
+const TONOS_TEMA = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+const colorDeTema = (familia) => Object.fromEntries(TONOS_TEMA.map(t => [t, `rgb(var(--tema-${familia}-${t}) / <alpha-value>)`]));
+
 module.exports = {
 	darkMode: ['class'],
 	content: [
@@ -17,6 +22,8 @@ module.exports = {
 		},
 		extend: {
 			colors: {
+				blue: colorDeTema('blue'),
+				indigo: colorDeTema('indigo'),
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
