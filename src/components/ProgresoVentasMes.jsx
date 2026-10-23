@@ -3,12 +3,13 @@ import { TrendingUp } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { isUserInList } from '@/utils/userMatch';
 import { rangoDelMes, resumenVentasMes } from '@/utils/comisiones';
+import { monedaActual, simboloMoneda } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 
 // 🔧 Tarjeta "Ventas Finalizadas" del Inicio, como BARRA DE PROGRESO de efectividad de cobro:
 //   monto cobrado (grande) · meta = Ventas Totales del mes · % = finalizadas ÷ totales · lo que falta por cobrar.
 // Vendedor = SUS números; Administrador = total de toda la empresa. Usa las mismas reglas que Estadísticas
 // (utils/comisiones.js), incluido el margen de días y el ciclo extra del crédito, así ambas pantallas coinciden.
-const formatoUSD = (n) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const formatoUSD = (n) => `${simboloMoneda()}${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const ProgresoVentasMes = ({ orders = [], user, vistaDe }) => { // vistaDe: nombre del vendedor que el Admin eligió en "Comisiones — Ver"
   const esAdmin = user?.role === 'Administrador';
@@ -51,8 +52,8 @@ const ProgresoVentasMes = ({ orders = [], user, vistaDe }) => { // vistaDe: nomb
           </p>
 
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <p className="text-3xl md:text-4xl font-black text-blue-700">{formatoUSD(r.propias)} USD</p>
-            <p className="text-3xl md:text-4xl font-black text-slate-700">/ {formatoUSD(r.totalSales)} USD <span className="text-base md:text-lg font-bold text-slate-500">Vendido</span></p>
+            <p className="text-3xl md:text-4xl font-black text-blue-700">{formatoUSD(r.propias)} {monedaActual()}</p>
+            <p className="text-3xl md:text-4xl font-black text-slate-700">/ {formatoUSD(r.totalSales)} {monedaActual()} <span className="text-base md:text-lg font-bold text-slate-500">Vendido</span></p>
           </div>
 
           <div className="flex items-center gap-3 mt-2">
@@ -79,13 +80,13 @@ const ProgresoVentasMes = ({ orders = [], user, vistaDe }) => { // vistaDe: nomb
             ) : completo ? (
               <>🎉 <span className="font-semibold">¡Excelente!</span> Todo lo vendido este mes ya está entregado y cobrado.</>
             ) : (
-              <>💡 Falta por entregar y cobrar <span className="font-bold text-slate-800">{formatoUSD(r.falta)} USD</span> para completar el 100% de lo vendido en el mes.</>
+              <>💡 Falta por entregar y cobrar <span className="font-bold text-slate-800">{formatoUSD(r.falta)} {monedaActual()}</span> para completar el 100% de lo vendido en el mes.</>
             )}
           </p>
 
           {r.carrySales > 0 && (
             <p className="text-xs text-indigo-700 font-semibold mt-1.5">
-              + {formatoUSD(r.carrySales)} USD de ventas a crédito del mes anterior ya cobradas ({r.carryCount}) — también suman a la comisión (no cuentan en el %).
+              + {formatoUSD(r.carrySales)} {monedaActual()} de ventas a crédito del mes anterior ya cobradas ({r.carryCount}) — también suman a la comisión (no cuentan en el %).
             </p>
           )}
         </div>

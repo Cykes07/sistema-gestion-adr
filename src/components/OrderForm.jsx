@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
+import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import { 
@@ -252,7 +253,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
   const [abonoComprobantes, setAbonoComprobantes] = useState([]);
   const [isProcessingAbonoImages, setIsProcessingAbonoImages] = useState(false);
 
-  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
+  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(amount || 0);
   const roundUpToHalf = (num) => Math.ceil(num * 2) / 2;
 
   useEffect(() => { setLocalClients(clients); }, [clients]);

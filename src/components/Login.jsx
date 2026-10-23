@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/Text';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react'; // Se eliminó el ícono LogIn
+import { useEmpresa } from '@/utils/empresa';
 
 const DOMINIO_INTERNO = "@graficasadr.com"; 
 
@@ -13,6 +14,7 @@ const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const empresa = useEmpresa(); // 🔧 logo de Configuración de la Empresa
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -78,7 +80,7 @@ const Login = ({ onLogin }) => {
         <div className="text-center mb-10">
           {/* 🔥 AQUÍ ESTÁ EL LOGO 🔥 */}
           <img 
-            src="/logo.png" 
+            src={empresa.logo} alt={empresa.nombre} 
             className="h-20 w-auto object-contain mx-auto mb-6 drop-shadow-sm" 
           />
         </div>
@@ -125,7 +127,7 @@ const Login = ({ onLogin }) => {
           <div className="pt-2">
             <Button 
                 type="submit" 
-                className="w-full bg-[#1e3a8a] hover:bg-blue-900 h-12 text-base font-semibold shadow-md transition-all hover:shadow-lg text-white" 
+                className="w-full bg-blue-900 hover:bg-blue-950 h-12 text-base font-semibold shadow-md transition-all hover:shadow-lg text-white" 
                 disabled={loading}
             >
                 {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { supabase } from '../supabaseClient'
 import { Search, Plus, FileDown, Printer, Pencil, Trash2, Eye, User, FileText, Phone, ShoppingCart, DollarSign, Wallet, ShieldAlert, History, X, Edit2, ArrowUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -164,7 +165,7 @@ const ClientsPanel = ({ clients = [], orders = [], user, onCreateNew, onEditClie
       return { totalComprado, deudaActual, ordenesActivas, limite, porcentajeDeuda, sobregirado };
   }, [clienteExpediente, ordenesCliente]);
 
-  const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val || 0);
+  const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(val || 0);
 
   // 🔥 COMPONENTE DE CABECERA ORDENABLE 🔥
   const SortableHeader = ({ label, sortKey, align = 'left', width }) => (

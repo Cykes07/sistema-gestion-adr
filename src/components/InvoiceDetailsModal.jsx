@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { empresaActual } from '@/utils/empresa'; // 🔧 Configuración de la Empresa
 import { X, Printer, Ban, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import InvoiceStatusBadge from './InvoiceStatusBadge';
@@ -17,6 +18,7 @@ const InvoiceDetailsModal = ({
   };
 
   const isAnulada = invoice.status === 'ANULADA';
+  const empresa = empresaActual();
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 print:p-0 print:bg-white">
@@ -64,10 +66,9 @@ const InvoiceDetailsModal = ({
                  <h1 className="text-3xl font-black text-slate-900 tracking-tight">FACTURA</h1>
                  <p className="text-lg font-mono text-slate-600 mt-1">No. {String(invoice.sequential).padStart(9, '0')}</p>
                  <div className="mt-4 text-sm text-slate-500">
-                    <p className="font-bold text-slate-800">ADR Company</p>
-                    <p>RUC: 1799999999001</p>
-                    <p>Matriz: Av. Principal y Calle 1</p>
-                    <p>Quito - Ecuador</p>
+                    <p className="font-bold text-slate-800">{empresa.nombre}</p>
+                    <p>RUC: {empresa.ruc}</p>
+                    <p>Matriz: {empresa.direccion}</p>
                  </div>
               </div>
               <div className="text-right">

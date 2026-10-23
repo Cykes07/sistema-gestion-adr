@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { empresaActual } from '@/utils/empresa'; // 🔧 Configuración de la Empresa
 import { supabase } from '../supabaseClient';
 import { Package, Search, Plus, Save, Edit2, Trash2, Loader2, RefreshCw, X, Filter, ChevronLeft, ChevronRight, Warehouse, ArrowUpDown, Settings, Check, Printer, History, CalendarIcon, DollarSign, ShoppingCart, Scale, ClipboardList, PenTool, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -1547,7 +1548,7 @@ const InventoryPanel = ({ user, mode = 'manage' }) => {
                   <h1 className="text-2xl font-black tracking-widest uppercase text-slate-900">
                      {printType === 'audit' ? 'Auditoría Física de Inventario' : 'Reporte de Inventario'}
                   </h1>
-                  <p className="text-sm text-slate-600 mt-1 font-medium">ADRCOMPANY SAS</p>
+                  <p className="text-sm text-slate-600 mt-1 font-medium">{empresaActual().nombre}</p>
               </div>
               <div className="text-right">
                   <p className="text-sm font-bold">Fecha: {new Date().toLocaleDateString()}</p>

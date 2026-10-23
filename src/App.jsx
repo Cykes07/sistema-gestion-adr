@@ -40,6 +40,8 @@ import ValesCajaPanel from './components/ValesCajaPanel';
 import AbonosModal from '@/components/AbonosModal'; 
 import GeneralLedgerPanel from './components/GeneralLedgerPanel';
 import NotificationsPanel from './components/NotificationsPanel'; // 🔥 NUEVO PANEL DE NOTIFICACIONES
+import ConfiguracionEmpresa from './components/ConfiguracionEmpresa';
+import { cargarEmpresa, useEmpresa } from '@/utils/empresa';
 
 // 🔧 CAMBIO 10 (Fase 1+2): sin 'CONTABILIDAD'. 'VERIFICACIÓN' se inserta
 // dinámicamente antes de 'FINALIZADA' SOLO si la orden tuvo algún pago
@@ -198,6 +200,9 @@ function App() {
   const [cloningOrder, setCloningOrder] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
   const [vendedorVista, setVendedorVista] = useState(''); // 🔧 Inicio del Admin: vendedor elegido en "Comisiones — Ver" ('' = toda la empresa)
+  // 🔧 Configuración de la Empresa (logo, datos, color, moneda): se lee al abrir la app (también en el login) y al entrar.
+  const empresa = useEmpresa();
+  useEffect(() => { cargarEmpresa(); }, [user?.id]);
   const [abonoOrder, setAbonoOrder] = useState(null);
   const [viewOrderSource, setViewOrderSource] = useState(null);
 
@@ -689,6 +694,7 @@ function App() {
     if (currentView === 'mi-perfil') return <MyProfile user={user} />;
     if (currentView === 'clientes-lista') return ( <ClientsPanel clients={clients} orders={orders} user={user} onCreateNew={() => { setEditingClient(null); setShowClientFormModal(true); }} onEditClient={(client) => { setEditingClient(client); setShowClientFormModal(true); }} onViewOrder={(o) => handleViewOrder(o, 'clientes')} initialExpedienteClientId={pendingExpedienteClientId} onExpedienteOpened={() => setPendingExpedienteClientId(null)} /> );
     if (currentView === 'configuracion') return <AnulationConfig />;
+    if (currentView === 'configuracion-empresa') return user.role === 'Administrador' ? <ConfiguracionEmpresa /> : null;
     if (currentView === 'vales') return <ValesCajaPanel user={user} orders={orders} />;
     // 🔧 CAMBIO 10: ruta 'contabilidad-cierre' eliminada (rol Contabilidad fuera).
 
@@ -827,7 +833,7 @@ function App() {
     <>
       <div className="min-h-screen bg-slate-50 flex">
         <div className="hidden md:block w-64 flex-shrink-0"><Sidebar user={user} onLogout={handleLogout} currentView={currentView} onViewChange={handleViewChange} allowedViews={allowedViews} /></div>
-        <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-slate-900 text-white p-4 flex justify-between items-center shadow-md print:hidden"><span className="font-bold">Sistema Producción</span><div className="flex items-center gap-3"><Notifications user={user} orders={orders} archivedIds={archivedNotifications} onArchive={handleArchiveNotification} onViewOrder={(o) => handleViewOrder(o, 'tasks')} realtimeEvents={realtimeEvents} onClearEvent={handleClearEvent} onViewChange={(view) => { handleViewChange(view); setIsMobileMenuOpen(false); }} /><button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}><Menu className="h-6 w-6" /></button></div></div>
+        <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-slate-900 text-white p-4 flex justify-between items-center shadow-md print:hidden"><span className="font-bold truncate mr-3">{empresa.nombre}</span><div className="flex items-center gap-3"><Notifications user={user} orders={orders} archivedIds={archivedNotifications} onArchive={handleArchiveNotification} onViewOrder={(o) => handleViewOrder(o, 'tasks')} realtimeEvents={realtimeEvents} onClearEvent={handleClearEvent} onViewChange={(view) => { handleViewChange(view); setIsMobileMenuOpen(false); }} /><button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}><Menu className="h-6 w-6" /></button></div></div>
         {isMobileMenuOpen && (<div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setIsMobileMenuOpen(false)}><div className="w-64 bg-slate-900 h-full shadow-2xl" onClick={e => e.stopPropagation()}><Sidebar user={user} onLogout={handleLogout} currentView={currentView} onViewChange={(view) => { handleViewChange(view); setIsMobileMenuOpen(false); }} allowedViews={allowedViews} /></div></div>)}
         <div className="flex-1 w-full md:w-[calc(100%-16rem)] min-h-screen transition-all duration-300 flex flex-col"><div className="hidden md:flex bg-white border-b border-slate-200 h-16 px-8 items-center justify-end sticky top-0 z-20 shadow-sm print:hidden"><div className="flex items-center gap-4"><Notifications user={user} orders={orders} archivedIds={archivedNotifications} onArchive={handleArchiveNotification} onViewOrder={(o) => handleViewOrder(o, 'tasks')} realtimeEvents={realtimeEvents} onClearEvent={handleClearEvent} onViewChange={handleViewChange} /><div className="h-8 w-[1px] bg-slate-200"></div><span className="text-sm font-semibold text-slate-700">{user.name}</span></div></div><div className="container mx-auto px-4 py-8 md:p-8 mt-12 md:mt-0 flex-1 print:p-0 print:max-w-none print:mt-0">{renderContent()}</div></div>
       </div>

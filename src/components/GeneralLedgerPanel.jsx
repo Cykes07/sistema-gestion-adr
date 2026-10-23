@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { empresaActual, monedaActual } from '@/utils/empresa'; // 🔧 Configuración de la Empresa
 import { supabase } from '../supabaseClient';
 import { Calendar as CalendarIcon, Printer, Loader2, BookOpen, DollarSign, Building, TrendingDown, Filter, Users, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,7 @@ import { cn } from '@/lib/utils';
 const FILTROS = ['TODOS', 'EFECTIVO', 'BANCOS / TRANSFERENCIAS', 'SOLO INGRESOS', 'SOLO EGRESOS'];
 
 const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
+  const empresa = empresaActual(); // 🔧 logo y datos de la empresa para la impresión
   const toLocalDateStr = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
@@ -334,7 +336,7 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
     return String(num).padStart(7, '0');
   }
 
-  const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val || 0);
+  const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(val || 0);
 
   const displayDate = new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -614,10 +616,10 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
             {/* CABECERA IMPRESIÓN */}
             <div className="flex justify-between items-center border-b-2 border-black pb-4 mb-6">
                 <div className="flex items-center gap-4">
-                    <img src="/logo.png" alt="Logo" className="h-16 object-contain" />
+                    <img src={empresa.logo} alt={empresa.nombre} className="h-16 object-contain" />
                     <div>
-                        <h1 className="text-xl font-black tracking-widest text-slate-800">ADRCOMPANY SAS</h1>
-                        <p className="text-[11px] text-slate-600">AV. ZENON MACIAS 306 Y CALLE LA MERCED • PLAYAS</p>
+                        <h1 className="text-xl font-black tracking-widest text-slate-800">{empresa.nombre}</h1>
+                        <p className="text-[11px] text-slate-600 uppercase">{empresa.direccion}</p>
                     </div>
                 </div>
                 <div className="text-right">

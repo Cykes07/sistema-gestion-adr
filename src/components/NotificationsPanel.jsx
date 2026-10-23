@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { Bell, UserPlus, Info, Receipt, FileText, ExternalLink, X, CheckCircle2, ArrowRight, Loader2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ShieldCheck, DollarSign, Landmark, Calendar, ShoppingCart, Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '../supabaseClient';
@@ -716,7 +717,7 @@ const NotificationsPanel = ({
     } catch (e) { return '-'; }
   };
 
-  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
+  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(amount || 0);
 
   // 🔧 "Pagos por Verificar": aparecen apenas Ventas registra un pago no-efectivo (anticipo/abono), sin esperar
   // a que la orden termine de producirse. Helpers a nivel de módulo (construirPagosAVerificar). El Admin marca un

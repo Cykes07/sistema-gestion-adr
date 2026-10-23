@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { 
   Eye, Edit, Trash2, Plus, Printer, FileSpreadsheet,
   ChevronLeft, ChevronRight, RotateCcw, Calendar as CalendarIcon,
@@ -66,7 +67,7 @@ const ProformasPanel = ({
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(amount || 0);
   };
 
   const formatProformaId = (proforma) => (proforma.proformaNumber || proforma.id).toString().padStart(7, '0');

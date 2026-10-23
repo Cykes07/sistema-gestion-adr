@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { empresaActual, monedaActual } from '@/utils/empresa'; // 🔧 Configuración de la Empresa
 import { X, Printer, CheckCircle2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -33,7 +34,8 @@ const ProformaDetailsModal = ({
 
   if (!proforma) return null;
 
-  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
+  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(amount || 0);
+  const empresa = empresaActual(); // datos y logo de la empresa para la impresión
   const formatDate = (dateString) => {
     try { 
         const d = new Date(dateString);
@@ -259,21 +261,23 @@ const ProformaDetailsModal = ({
                 <div className="grid grid-cols-[1fr_2fr] gap-6 mb-4 w-full items-center">
                     {/* IZQUIERDA: Solo Logo */}
                     <div className="w-full flex items-center justify-center p-2">
-                        <img src="/logo.png" alt="Rótulos ADR" className="max-h-[110px] max-w-full object-contain" />
+                        <img src={empresa.logo} alt={empresa.nombre} className="max-h-[110px] max-w-full object-contain" />
                     </div>
 
                     {/* DERECHA: Toda la info de empresa agrupada */}
                     <div className="w-full border border-black rounded-xl p-3 flex flex-col text-center shadow-sm">
-                        <div className="font-bold text-[16px] mb-1 uppercase tracking-wider">ADRCOMPANY SAS</div>
-                        <div className="text-[11px] leading-tight text-slate-800">
-                            AV. ZENON MACIAS 306 Y CALLE LA MERCED • PLAYAS - GUAYAS
+                        <div className="font-bold text-[16px] mb-1 uppercase tracking-wider">{empresa.nombre}</div>
+                        <div className="text-[11px] leading-tight text-slate-800 uppercase">
+                            {empresa.direccion}
                         </div>
                         <div className="text-[11px] leading-tight mb-2 text-slate-800">
-                            <span className="font-bold">Tel:</span> +593 98 265 7066 &nbsp;|&nbsp; <span className="font-bold">Email:</span> imprenta_milena@hotmail.com
+                            {empresa.telefono && <><span className="font-bold">Tel:</span> {empresa.telefono}</>}
+                            {empresa.telefono && empresa.correo && <> &nbsp;|&nbsp; </>}
+                            {empresa.correo && <><span className="font-bold">Email:</span> {empresa.correo}</>}
                         </div>
                         
                         <div className="border-t border-black pt-2 mt-1 flex justify-around items-center">
-                            <div className="text-sm"><span className="font-bold">R.U.C.:</span> 0993397285001</div>
+                            <div className="text-sm"><span className="font-bold">R.U.C.:</span> {empresa.ruc}</div>
                             <div className="text-xl font-black tracking-widest uppercase">PROFORMA</div>
                             <div className="text-[14px]"><span className="font-bold">No.</span> {String(data.numero).padStart(7, '0')}</div>
                         </div>
@@ -383,6 +387,7 @@ const ProformaDetailsModal = ({
                                 Tiempo de entrega estimado: {data.financials.diasEntrega > 0 ? `${data.financials.diasEntrega} días laborables` : 'Por Definir'}.
                             </p>
                             <p className="italic text-[10px] text-gray-500 mt-0.5">Validez de la cotización: 15 días.</p>
+                            {empresa.pieDocumentos && <p className="text-[10px] text-gray-600 mt-2 whitespace-pre-line">{empresa.pieDocumentos}</p>}
                         </div>
                     </div>
 
@@ -395,7 +400,7 @@ const ProformaDetailsModal = ({
                                 </tr>
                                 <tr className="border-b border-black">
                                     <td className="p-1.5 border-r border-black">SUBTOTAL 0%</td>
-                                    <td className="p-1.5 text-right">$0.00</td>
+                                    <td className="p-1.5 text-right">{formatCurrency(0)}</td>
                                 </tr>
                                 <tr className="border-b border-black">
                                     <td className="p-1.5 border-r border-black">SUBTOTAL SIN IMP.</td>

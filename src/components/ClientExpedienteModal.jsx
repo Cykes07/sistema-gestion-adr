@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { User, FileText, Phone, ShoppingCart, DollarSign, Wallet, ShieldAlert, History, X, Edit2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val || 0);
+const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(val || 0);
 
 // 🔧 NUEVO: extraído de ClientsPanel.jsx para poder mostrarse como popup desde
 // cualquier pantalla (ej. desde el detalle de una orden) sin tener que navegar

@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { BarChart3, TrendingUp, Calendar, Filter, Download, FileSpreadsheet, Users, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '../supabaseClient';
@@ -233,7 +234,7 @@ const StatisticsCharts = ({
   const totalEffectiveness = totals.totalSales > 0 ? ((totals.finalizedSales - totals.carrySales) / totals.totalSales * 100).toFixed(1) : '0.0';
   const formatCurrency = val => new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD'
+    currency: monedaActual()
   }).format(val || 0);
 
   // --- Export CSV ---

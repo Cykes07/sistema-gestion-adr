@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, Users, FileText, Briefcase, Settings, BarChart2, LogOut, ChevronRight, ChevronDown, UserCircle, Shield, Receipt, FileSpreadsheet, Package, ShieldCheck, BookOpen, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEmpresa } from '@/utils/empresa';
 
 const MenuItem = ({ item, isActive, currentView, onClick, onSubItemClick }) => {
   const Icon = item.icon;
@@ -58,6 +59,7 @@ const MenuItem = ({ item, isActive, currentView, onClick, onSubItemClick }) => {
 };
 
 const Sidebar = ({ user, onLogout, currentView, onViewChange, allowedViews = [] }) => {
+  const empresa = useEmpresa();
   
   const allMenuItems = [
     { id: 'inicio', label: 'Inicio', icon: Home }, 
@@ -100,9 +102,10 @@ const Sidebar = ({ user, onLogout, currentView, onViewChange, allowedViews = [] 
         { label: 'Calendario', id: 'trabajo-disponibilidad' }
       ]
     }, 
-    { id: 'usuarios', label: 'Admin Usuarios', icon: Shield, submenu: [
+    { id: 'usuarios', label: 'Administración', icon: Shield, submenu: [
         { label: 'Gestión Personal', id: 'admin-usuarios' }, 
-        { label: 'Roles y Permisos', id: 'roles-permisos' } 
+        { label: 'Roles y Permisos', id: 'roles-permisos' },
+        { label: 'Configuración de la Empresa', id: 'configuracion-empresa' } // 🔧 solo Admin (no está en Roles y Permisos) 
       ]
     },
     { id: 'estadisticas', label: 'Estadísticas', icon: BarChart2, submenu: [
@@ -155,6 +158,10 @@ const Sidebar = ({ user, onLogout, currentView, onViewChange, allowedViews = [] 
   return (
     <div className="w-64 bg-slate-900 h-screen flex flex-col shadow-2xl border-r border-slate-800 fixed left-0 top-0 z-40 overflow-y-auto print:hidden">
       <div className="p-6 border-b border-slate-800">
+        {/* 🔧 Logo de la empresa (Configuración de la Empresa) */}
+        <div className="bg-white rounded-lg px-3 py-2 mb-4 h-14 flex items-center justify-center">
+          <img src={empresa.logo} alt={empresa.nombre} className="max-h-full max-w-full object-contain" />
+        </div>
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-bold text-white truncate">{user?.name}</h2>
           <div className="flex items-center gap-2">

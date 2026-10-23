@@ -1,4 +1,5 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
+import { empresaActual, monedaActual } from '@/utils/empresa'; // 🔧 Configuración de la Empresa
 import { supabase } from '../supabaseClient';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -372,7 +373,7 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate }) 
         }
     };
 
-    const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
+    const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(amount || 0);
 
     return (
         <tr className="hover:bg-slate-50 border-b border-slate-200">
@@ -524,6 +525,7 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate }) 
 
 const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders = [], onEditClient, onSwitchOrder, onOpenClientProfileNewTab, onClose, onProductToggle, isTaskView, onAdvanceWorkflow, onRegressWorkflow, onArchiveOrder, onUpdateOrder, onGenerateInvoice, canEdit, onAbonoOrder }) => {
   const [previewImage, setPreviewImage] = useState(null);
+  const empresa = empresaActual(); // 🔧 logo y datos de la empresa para la impresión
   // 🔧 NUEVO: popup del expediente del cliente (historial + editar), sin salir de la orden
   const [showClientExpediente, setShowClientExpediente] = useState(false);
   const [showTimeline, setShowTimeline] = useState(true); // 🔧 NUEVO: abierta por defecto
@@ -717,7 +719,7 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
       }
   };
 
-  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
+  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(amount || 0);
 
   // 🔧 AJUSTE: después de migrar la columna fecha_entrega de "solo fecha" a
   // "fecha y hora" en la base de datos, todas las órdenes viejas quedaron con
@@ -1464,12 +1466,12 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                 
                 <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-4">
                     <div className="w-1/2">
-                         <img src="/logo.png" alt="Logo" className="w-40 h-auto object-contain mb-2" />
+                         <img src={empresa.logo} alt={empresa.nombre} className="w-40 h-auto object-contain mb-2" />
                          <div className="text-[10px] text-slate-700 leading-tight font-medium">
-                             <p className="font-bold text-black text-xs mb-0.5">RUC: 0993397285001</p>
-                             <p>📍 Av. Zenon Macias y calle la Merced, General Villamil, Guayas, Ecuador</p>
-                             <p>📞 Tel: 0990761566 - 0982657066</p>
-                             <p>🌐 Redes: @graficasadr</p>
+                             <p className="font-bold text-black text-xs mb-0.5">RUC: {empresa.ruc}</p>
+                             {empresa.direccion && <p>📍 {empresa.direccion}</p>}
+                             {empresa.telefono && <p>📞 Tel: {empresa.telefono}</p>}
+                             {empresa.redes && <p>🌐 Redes: {empresa.redes}</p>}
                          </div>
                     </div>
                     <div className="text-right w-1/2">
@@ -1629,6 +1631,10 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                            ))}
                         </div>
                     </div>
+                )}
+
+                {empresa.pieDocumentos && (
+                    <div className="mt-6 pt-2 border-t border-gray-300 text-[10px] text-gray-600 whitespace-pre-line" style={{ pageBreakInside: 'avoid' }}>{empresa.pieDocumentos}</div>
                 )}
             </div>
         </div>

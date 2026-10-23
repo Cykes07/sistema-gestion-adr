@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { 
   Eye, Edit, Trash2, CreditCard, 
   Search, Printer, Plus,
@@ -70,7 +71,7 @@ const OrdersPanel = ({
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: monedaActual() }).format(amount || 0);
   };
 
   const formatOrderId = (order) => {
