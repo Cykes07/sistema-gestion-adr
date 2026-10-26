@@ -13,6 +13,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { getValidSellers, formatResponsableName, removeDuplicateUsers } from '@/lib/utils';
 import { isUserInList } from '@/utils/userMatch';
 import ClientExpedienteModal from './ClientExpedienteModal';
+import { medidaDelProducto, quitarMedidaDelTexto, referenciaCatalogo } from '@/utils/preciosProducto';
+import DiferenciaPrecio from './DiferenciaPrecio';
 import { historialDelCredito, fechaCorta } from '@/utils/historialCredito'; // 🔧 historial del crédito (23-oct)
 
 // 🔧 CAMBIO 10 (Fase 1+2): sin 'CONTABILIDAD'. 'VERIFICACIÓN' se inserta
@@ -151,7 +153,7 @@ const getPrintDesc = (prod) => {
 // las dos partes para poder imprimir el nombre arriba (grande) y la descripción
 // extra abajo (chica y gris), en vez de todo junto en una sola línea larga.
 const getPrintDescParts = (prod) => {
-    const textoCompleto = getPrintDesc(prod);
+    const textoCompleto = medidaDelProducto(prod) ? quitarMedidaDelTexto(getPrintDesc(prod)) : getPrintDesc(prod);
     const idx = textoCompleto.indexOf(' - ');
     if (idx === -1) return { nombre: textoCompleto, detalle: '' };
     return {
@@ -173,7 +175,7 @@ const InlineComprobante = ({ items = [], onClickImage }) => {
     );
 };
 
-const ProductProductionRow = ({ product, index, order, user, onProductUpdate }) => {
+const ProductProductionRow = ({ product, index, order, user, onProductUpdate, conMedidas = false, mayorista = false }) => {
     const { toast } = useToast();
     const isProduction = user?.role === 'Producción' || user?.role === 'Administrador';
     // 🔧 NUEVO: Producción puede revertir sus propios productos finalizados mientras la orden siga
@@ -399,9 +401,37 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate }) 
                     );
                 })()}
              </td>
-             {showFinancials && <td className="px-4 py-4 text-right text-slate-600 align-top">{formatCurrency(product.precio || product.precioUnitario)}</td>}
-             <td className="px-4 py-4 text-center text-slate-600 font-bold align-top">{product.cantidad}</td>
-             {showFinancials && <td className="px-4 py-4 text-right font-bold text-slate-900 align-top">{formatCurrency(product.total || ((product.precio || product.precioUnitario) * product.cantidad))}</td>}
+             {(() => {
+                 const medida = medidaDelProducto(product);
+                 const cantidad = Number(product.cantidad) || 0;
+                 const total = Number(product.total) || ((Number(product.precio || product.precioUnitario) || 0) * cantidad);
+                 const referencia = referenciaCatalogo(product, mayorista);
+                 return (
+                     <>
+                         {conMedidas && (
+                             <td className="px-4 py-4 text-center align-top whitespace-nowrap">
+                                 {medida && (
+                                     <>
+                                         <div className="font-bold text-slate-900">{medida.texto}</div>
+                                         <div className="text-xs text-slate-500">({medida.area.toFixed(2)} m² c/u)</div>
+                                     </>
+                                 )}
+                             </td>
+                         )}
+                         {conMedidas && showFinancials && (
+                             <td className="px-4 py-4 text-right text-slate-600 align-top">{product.es_por_metro ? formatCurrency(product.precioUnitario || product.precio) : ''}</td>
+                         )}
+                         <td className="px-4 py-4 text-center text-slate-600 font-bold align-top">{product.cantidad}</td>
+                         {showFinancials && <td className="px-4 py-4 text-right font-bold text-slate-800 align-top">{formatCurrency(cantidad > 0 ? total / cantidad : total)}</td>}
+                         {showFinancials && (
+                             <td className="px-4 py-4 text-right font-bold text-slate-900 align-top">
+                                 {referencia && <div className="mb-1"><DiferenciaPrecio diferencia={total - referencia.total} /></div>}
+                                 {formatCurrency(total)}
+                             </td>
+                         )}
+                     </>
+                 );
+             })()}
              
              <td className="px-4 py-3 align-top min-w-[280px] bg-slate-50/50 border-l border-slate-200">
                   {status === 'PENDIENTE' && (
@@ -536,6 +566,8 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
   // de la orden anterior, se usan los de la orden actual. Y cada fila lleva la orden en su key, así se arma de cero.
   const [localProductsOrderId, setLocalProductsOrderId] = useState(null);
   const productosOrden = (order && localProductsOrderId === order.id) ? localProducts : (order?.productos || []);
+  const hayMedidas = productosOrden.some(p => p?.es_por_metro);
+  const clienteMayorista = !!(clients || []).find(c => String(c.id) === String(order?.cliente_id))?.es_mayorista;
   const [localVendedor, setLocalVendedor] = useState('');
   
   const [localImages, setLocalImages] = useState([]); 
@@ -1075,17 +1107,19 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                                 <tr>
                                     <th className="px-4 py-3 text-center font-bold w-12">#</th>
                                     <th className="px-4 py-3 text-left font-bold">Item a Producir</th>
-                                    {showFinancials && <th className="px-4 py-3 text-right font-bold w-24">Unitario</th>}
+                                    {hayMedidas && <th className="px-4 py-3 text-center font-bold w-32">Medida</th>}
+                                    {hayMedidas && showFinancials && <th className="px-4 py-3 text-right font-bold w-28">P. Base ($/m²)</th>}
                                     <th className="px-4 py-3 text-center font-bold w-16">Cant.</th>
-                                    {showFinancials && <th className="px-4 py-3 text-right font-bold w-24">Total</th>}
+                                    {showFinancials && <th className="px-4 py-3 text-right font-bold w-28">P. Unitario</th>}
+                                    {showFinancials && <th className="px-4 py-3 text-right font-bold w-28">Total</th>}
                                     <th className="px-4 py-3 text-left font-bold w-[300px]">Estado / Inventario</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 bg-white">
                                 {productosOrden.map((prod, idx) => (
-                                    <ProductProductionRow key={`${order.id}-${idx}`} product={prod} index={idx} order={order} user={user} onProductUpdate={handleProductUpdateLocal} />
+                                    <ProductProductionRow key={`${order.id}-${idx}`} product={prod} index={idx} order={order} user={user} onProductUpdate={handleProductUpdateLocal} conMedidas={hayMedidas} mayorista={clienteMayorista} />
                                 ))}
-                                {(!productosOrden || productosOrden.length === 0) && (<tr><td colSpan={showFinancials ? "6" : "4"} className="px-4 py-8 text-center text-slate-400 italic">No hay productos registrados</td></tr>)}
+                                {(!productosOrden || productosOrden.length === 0) && (<tr><td colSpan={(showFinancials ? 6 : 4) + (hayMedidas ? (showFinancials ? 2 : 1) : 0)} className="px-4 py-8 text-center text-slate-400 italic">No hay productos registrados</td></tr>)}
                             </tbody>
                         </table>
                     </div>
@@ -1546,6 +1580,7 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                                                 <>
                                                     <div className="font-bold">{nombre}</div>
                                                     {detalle && <div className="font-normal normal-case text-[10px] text-gray-500 mt-0.5">{detalle}</div>}
+                                                    {medidaDelProducto(prod) && <div className="font-bold normal-case text-[11px] mt-0.5">MEDIDA: {medidaDelProducto(prod).texto}</div>}
                                                 </>
                                             );
                                         })()}

@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
+import { precioSegunCatalogo, referenciaCatalogo, redondearAMedio } from '@/utils/preciosProducto';
+import DiferenciaPrecio from './DiferenciaPrecio';
+import TarifasVolumen from './TarifasVolumen';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import { 
@@ -579,20 +582,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
       }
   };
 
-  const getPriceForQty = (qty, item, applyMayorista = false) => {
-      if (applyMayorista) {
-          const tiersDist = [...(item.precios_distribuidor || [])].sort((a,b) => b.cantidad - a.cantidad);
-          const tierDist = tiersDist.find(t => qty >= t.cantidad);
-          if (tierDist && Number(tierDist.precio) > 0) return Number(tierDist.precio);
-          
-          const baseDist = Number(item.precioDistribuidorBase || item.precio_distribuidor || 0);
-          if (baseDist > 0) return baseDist;
-      }
-      const tiersNorm = [...(item.precios_escalonados || [])].sort((a,b) => b.cantidad - a.cantidad);
-      const tierNorm = tiersNorm.find(t => qty >= t.cantidad);
-      if (tierNorm && Number(tierNorm.precio) > 0) return Number(tierNorm.precio);
-      return Number(item.precioBaseOriginal || item.precio || 0);
-  };
+  const getPriceForQty = precioSegunCatalogo;
 
   const recalculatePrices = (itemsList, isWholesale) => {
       return itemsList.map(p => {
@@ -1303,8 +1293,8 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                       <tr>
                          <th className="py-2 px-2 text-left w-10">#</th>
                          <th className="py-2 px-2 text-left">Producto y Detalles</th>
-                         <th className="py-2 px-2 text-center w-20">Cant.</th>
-                         <th className="py-2 px-2 text-right w-24">Unitario</th>
+                         <th className="py-2 px-2 text-center w-36">Cant.</th>
+                         <th className="py-2 px-2 text-right w-32">{formData.productos.some(p => p.es_por_metro && p.descripcion) ? 'Unitario ($ / m²)' : 'Unitario'}</th>
                          <th className="py-2 px-2 text-right w-28">Total</th>
                          <th className="w-8"></th>
                       </tr>
@@ -1328,6 +1318,11 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
 
                         const precioPorPieza = areaIndividual * pUnitario;
                         const aplicaMinimo = row.es_por_metro && areaIndividual > 0 && precioPorPieza > 0 && precioPorPieza < PRECIO_MINIMO_ITEM;
+                        const referencia = cleanDescription ? referenciaCatalogo(row, formData.esMayorista) : null;
+                        const totalSegunPrecio = row.es_por_metro
+                            ? (areaIndividual > 0 && q > 0 ? redondearAMedio(Math.max(precioPorPieza, PRECIO_MINIMO_ITEM) * q) : 0)
+                            : Number((q * pUnitario).toFixed(2));
+                        const totalEditadoAMano = row.es_por_metro && Math.abs((parseFloat(row.total) || 0) - totalSegunPrecio) >= 0.01;
 
                         return (
                           <tr key={idx} className="hover:bg-slate-50 group">
@@ -1452,17 +1447,25 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                                     onBlur={e => handleQuantityBlur(idx, e.target.value)}
                                     readOnly={isEffectivelyReadOnly}
                                  />
-                                 {row.es_por_metro && <span className="absolute bottom-[-2px] left-0 w-full text-center text-[9px] text-purple-600 font-bold leading-tight">Piezas</span>}
+                                 {row.es_por_metro && <span className="block w-full text-center text-[9px] text-purple-600 font-bold leading-tight">Piezas</span>}
+                                 {cleanDescription && <TarifasVolumen item={row} mayorista={formData.esMayorista} />}
                              </td>
 
-                             <td className="py-2 px-2 align-top pt-4">
-                                 <input 
-                                     type="number" step="0.01" 
-                                     className="w-full text-right border-none bg-transparent focus:ring-0 text-sm p-0 text-green-700 font-bold h-9" 
-                                     value={row.precioUnitario !== undefined ? row.precioUnitario : ''} 
-                                     onChange={e => updateProduct(idx, 'precioUnitario', e.target.value)} 
-                                     readOnly={isEffectivelyReadOnly}
-                                 />
+                             <td className="py-2 px-2 align-top pt-3">
+                                 <div className="flex items-center justify-end font-bold text-slate-800">
+                                     {cleanDescription && !isEffectivelyReadOnly && <span className="mr-1">$</span>}
+                                     <input
+                                         type="number" step="0.01"
+                                         className={`w-20 text-right focus:ring-0 text-sm p-1 text-green-700 font-bold h-8 ${cleanDescription && !isEffectivelyReadOnly ? 'border border-slate-300 rounded bg-white' : 'border-none bg-transparent'}`}
+                                         value={row.precioUnitario !== undefined ? row.precioUnitario : ''}
+                                         onChange={e => updateProduct(idx, 'precioUnitario', e.target.value)}
+                                         readOnly={isEffectivelyReadOnly}
+                                     />
+                                 </div>
+                                 {referencia && <div className="flex justify-end mt-1"><DiferenciaPrecio diferencia={pUnitario - referencia.unidad} /></div>}
+                                 {cleanDescription && !row.es_por_metro && formData.productos.some(p => p.es_por_metro && p.descripcion) && (
+                                     <div className="text-[9px] text-slate-400 font-medium mt-1 text-right">por unidad</div>
+                                 )}
                              </td>
                              
                              <td className="py-2 px-2 align-top pt-3 bg-slate-50/50">
@@ -1476,6 +1479,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                                          readOnly={isEffectivelyReadOnly || !row.es_por_metro}
                                      />
                                  </div>
+                                 {referencia && totalEditadoAMano && <div className="flex justify-end mt-1"><DiferenciaPrecio diferencia={(parseFloat(row.total) || 0) - referencia.total} /></div>}
                                  {row.es_por_metro && !isEffectivelyReadOnly && (
                                      <div className="text-[9px] text-slate-400 font-medium mt-1 text-right italic" title="Puedes modificar este valor a mano">Editable</div>
                                  )}

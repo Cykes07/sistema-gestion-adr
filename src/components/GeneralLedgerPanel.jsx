@@ -7,6 +7,23 @@ import { cn } from '@/lib/utils';
 
 const FILTROS = ['TODOS', 'EFECTIVO', 'BANCOS / TRANSFERENCIAS', 'SOLO INGRESOS', 'SOLO EGRESOS'];
 
+// 🔧 (26-oct) Hora de cada movimiento, para ordenar el día cronológicamente (antes iba por monto) y mostrarla.
+const diaLocalDe = (v) => {
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+// Un momento solo sirve como hora del movimiento si cae el mismo día que se está mirando.
+const momentoDelDia = (v, dia) => (v && diaLocalDe(v) === dia ? new Date(v).toISOString() : null);
+// Abonos: la fecha la elige el vendedor (se guarda con hora fija 12:00), pero el `id` es Date.now() del momento en que se
+// registró en AbonosModal: esa es la hora real, si el abono se registró el mismo día de su fecha.
+const momentoDelAbono = (abono) => {
+  const id = Number(abono?.id);
+  if (!Number.isFinite(id) || id < 1577836800000 || id > Date.now() + 86400000) return null; // no es una marca de tiempo
+  return momentoDelDia(id, diaLocalDe(abono.fecha));
+};
+const horaCorta = (iso) => (iso ? new Date(iso).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
+
 const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
   const empresa = empresaActual(); // 🔧 logo y datos de la empresa para la impresión
   const toLocalDateStr = (isoString) => {
@@ -148,7 +165,8 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
           vendedorId: o.recibido_por_anticipo_id || (o.vendedor_ids && o.vendedor_ids[0]) || null,
           metodo: o.formaPagoAnticipo || o.forma_pago_anticipo || 'Efectivo',
           ingreso: Number(o.anticipo), egreso: 0,
-          nota: saldoPendiente > 0.01 ? 'SALDO PDTE' : 'PAGADO' // 🔧 NUEVO: misma nota que el Reporte Diario
+          nota: saldoPendiente > 0.01 ? 'SALDO PDTE' : 'PAGADO', // 🔧 NUEVO: misma nota que el Reporte Diario
+          momento: momentoDelDia(o.createdAt || o.created_at, selectedDate)
         });
       }
 
@@ -163,7 +181,9 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
             vendedorId: abono.cobrador_id || null,
             metodo: abono.metodoPago || 'Efectivo',
             ingreso: Number(abono.monto), egreso: 0,
-            nota: 'ABONO REGISTRADO'
+            nota: 'ABONO REGISTRADO',
+            momento: momentoDelAbono(abono),
+            notaHora: 'El abono se registró otro día; no tiene hora de este día.'
           });
         }
       });
@@ -189,7 +209,9 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
           vendedorId: o.recibido_por_saldo_id || (o.vendedor_ids && o.vendedor_ids[0]) || null,
           metodo: o.formaPagoSaldo || (esCredito ? 'Crédito' : 'Efectivo'),
           ingreso: esCredito ? 0 : saldoFinalReal, egreso: 0,
-          nota: esCredito ? 'A CRÉDITO' : 'COMPLETADO'
+          nota: esCredito ? 'A CRÉDITO' : 'COMPLETADO',
+          momento: momentoDelDia(o.fecha_pago_saldo || o.updatedAt || o.updated_at, selectedDate),
+          horaAproximada: true // es la hora de la última modificación de la orden (no hay hora propia del cobro del saldo)
         });
       }
 
@@ -203,7 +225,9 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
           vendedorId: o.recibido_por_anticipo_id || (o.vendedor_ids && o.vendedor_ids[0]) || null,
           metodo: o.formaPagoAnticipo || 'Efectivo',
           ingreso: 0, egreso: Number(o.anticipo),
-          nota: 'ANULADO'
+          nota: 'ANULADO',
+          momento: momentoDelDia(o.updatedAt || o.updated_at, selectedDate),
+          horaAproximada: true
         });
       }
     });
@@ -218,11 +242,15 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
         vendedorId: vale.vendedor_id || null,
         metodo: 'Efectivo', 
         ingreso: 0, egreso: Number(vale.monto),
-        nota: 'EGRESO INTERNO'
+        nota: 'EGRESO INTERNO',
+        momento: momentoDelDia(vale.created_at, selectedDate),
+        notaHora: 'El vale se registró otro día; no tiene hora de este día.'
       });
     });
 
-    return txs.sort((a, b) => b.ingreso - a.ingreso);
+    return txs
+      .map((tx, i) => ({ ...tx, _i: i }))
+      .sort((a, b) => (a.momento && b.momento ? a.momento.localeCompare(b.momento) : a.momento ? -1 : b.momento ? 1 : 0) || a._i - b._i);
   }, [orders, selectedDate, valesDelDia]);
 
   // 3. CÁLCULO MÁGICO DE CAJAS POR VENDEDOR (Inicio, Cierre, Entregado, Saldo Mañana)
@@ -486,6 +514,7 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
                   <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 text-xs uppercase">
                       <tr>
                           <th className="px-4 py-3 text-center w-12">#</th>
+                          <th className="px-4 py-3 text-center w-16">Hora</th>
                           <th className="px-4 py-3 font-bold">Descripción del Movimiento</th>
                           <th className="px-4 py-3 text-center">Orden</th>
                           <th className="px-4 py-3 font-bold">Vendedor</th>
@@ -497,11 +526,15 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                       {transaccionesFiltradas.length === 0 ? (
-                          <tr><td colSpan="8" className="p-8 text-center text-slate-500">No hay movimientos que coincidan con los filtros.</td></tr>
+                          <tr><td colSpan="9" className="p-8 text-center text-slate-500">No hay movimientos que coincidan con los filtros.</td></tr>
                       ) : (
                           transaccionesFiltradas.map((tx, idx) => (
                               <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                                   <td className="px-4 py-3 text-center text-slate-400 font-bold">{idx + 1}</td>
+                                  <td className="px-4 py-3 text-center font-mono text-xs text-slate-600 whitespace-nowrap"
+                                      title={tx.momento ? (tx.horaAproximada ? 'Hora de la última modificación de la orden' : undefined) : tx.notaHora}>
+                                      {tx.momento ? <>{horaCorta(tx.momento)}{tx.horaAproximada && <span className="text-slate-400">*</span>}</> : <span className="text-slate-300">—</span>}
+                                  </td>
                                   <td className="px-4 py-3">
                                       <div className="font-bold uppercase text-xs flex flex-wrap items-center gap-1">
                                           <span className={cn(
@@ -540,12 +573,15 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
                   </tbody>
                   <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-300">
                       <tr>
-                          <td colSpan="5" className="px-4 py-3 text-right uppercase text-slate-600">Total Filtrado:</td>
+                          <td colSpan="6" className="px-4 py-3 text-right uppercase text-slate-600">Total Filtrado:</td>
                           <td className="px-4 py-3 text-right text-lg text-green-700">{formatCurrency(totalesTabla.ingresos)}</td>
                           <td className="px-4 py-3 text-right text-lg text-red-700">{formatCurrency(totalesTabla.egresos)}</td>
                       </tr>
                   </tfoot>
               </table>
+           )}
+           {!loading && transaccionesFiltradas.some(tx => tx.horaAproximada && tx.momento) && (
+               <p className="px-4 py-2 text-[11px] text-slate-400 border-t border-slate-100">* Retiros y anulaciones: hora de la última modificación de la orden.</p>
            )}
         </div>
 
@@ -650,6 +686,7 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
                 <thead>
                     <tr className="bg-gray-200 border-b border-black font-bold">
                         <th className="border-r border-black p-2 w-8 text-center">#</th>
+                        <th className="border-r border-black p-2 w-12 text-center">HORA</th>
                         <th className="border-r border-black p-2 text-left">DESCRIPCIÓN DEL MOVIMIENTO</th>
                         <th className="border-r border-black p-2 text-center">ORDEN</th>
                         <th className="border-r border-black p-2 text-left">VENDEDOR</th>
@@ -660,11 +697,12 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
                 </thead>
                 <tbody>
                     {transaccionesFiltradas.length === 0 ? (
-                        <tr><td colSpan="7" className="p-4 text-center italic">No se encontraron movimientos registrados.</td></tr>
+                        <tr><td colSpan="8" className="p-4 text-center italic">No se encontraron movimientos registrados.</td></tr>
                     ) : (
                         transaccionesFiltradas.map((tx, idx) => (
                             <tr key={tx.id} className="border-b border-black">
                                 <td className="border-r border-black p-1.5 text-center font-bold text-slate-500">{idx + 1}</td>
+                                <td className="border-r border-black p-1.5 text-center font-mono">{tx.momento ? horaCorta(tx.momento) : '—'}</td>
                                 <td className="border-r border-black p-1.5 uppercase font-medium">
                                     <span className="font-bold">{tx.tipo}</span> - <span>{tx.cliente}</span> - <span className="text-slate-600 font-normal">{tx.titulo}</span>
                                 </td>
@@ -679,7 +717,7 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
                 </tbody>
                 <tfoot>
                     <tr className="bg-gray-100 border-t-2 border-black font-bold">
-                        <td colSpan="5" className="border-r border-black p-2 text-right uppercase text-slate-700">Totales de la Tabla:</td>
+                        <td colSpan="6" className="border-r border-black p-2 text-right uppercase text-slate-700">Totales de la Tabla:</td>
                         <td className="border-r border-black p-2 text-right text-green-800 font-black">{formatCurrency(totalesTabla.ingresos)}</td>
                         <td className="p-2 text-right text-red-800 font-black">{formatCurrency(totalesTabla.egresos)}</td>
                     </tr>

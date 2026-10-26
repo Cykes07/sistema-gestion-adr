@@ -6,7 +6,8 @@ import { rangoDelMes, resumenVentasMes } from '@/utils/comisiones';
 import { monedaActual, simboloMoneda } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 
 // 🔧 Tarjeta "Ventas Finalizadas" del Inicio, como BARRA DE PROGRESO de efectividad de cobro:
-//   monto cobrado (grande) · meta = Ventas Totales del mes · % = finalizadas ÷ totales · lo que falta por cobrar.
+//   (26-oct) monto cobrado del ciclo (grande, incluye créditos del mes anterior ya cobrados) · Meta del Ciclo = vendido del mes
+//   + créditos del mes anterior que aún pueden sumar · % = cobrado ÷ meta · lo que falta del mes y lo pendiente del mes anterior.
 // Vendedor = SUS números; Administrador = total de toda la empresa. Usa las mismas reglas que Estadísticas
 // (utils/comisiones.js), incluido el margen de días y el ciclo extra del crédito, así ambas pantallas coinciden.
 const formatoUSD = (n) => `${simboloMoneda()}${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -36,8 +37,9 @@ const ProgresoVentasMes = ({ orders = [], user, vistaDe }) => { // vistaDe: nomb
     };
   }, [orders, user, margenDias, esAdmin]);
 
-  const pct = Math.min(100, Math.max(0, r.porcentaje));
-  const completo = r.totalSales > 0 && r.falta < 0.005;
+  const pct = Math.min(100, Math.max(0, r.porcentajeCiclo));
+  const completo = r.metaCiclo > 0 && r.faltaCiclo < 0.005;
+  const limiteCreditos = r.limiteCreditosAnteriores ? r.limiteCreditosAnteriores.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' }) : '';
   const anchoRelleno = pct > 0 ? Math.max(pct, 2) : 0; // que siempre se note aunque sea muy poco
 
   return (
@@ -52,8 +54,8 @@ const ProgresoVentasMes = ({ orders = [], user, vistaDe }) => { // vistaDe: nomb
           </p>
 
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <p className="text-3xl md:text-4xl font-black text-blue-700">{formatoUSD(r.propias)} {monedaActual()}</p>
-            <p className="text-3xl md:text-4xl font-black text-slate-700">/ {formatoUSD(r.totalSales)} {monedaActual()} <span className="text-base md:text-lg font-bold text-slate-500">Vendido</span></p>
+            <p className="text-3xl md:text-4xl font-black text-blue-700">{formatoUSD(r.cobradoCiclo)} {monedaActual()}</p>
+            <p className="text-lg md:text-xl font-semibold text-slate-400">/ {formatoUSD(r.metaCiclo)} {monedaActual()} Meta del Ciclo</p>
           </div>
 
           <div className="flex items-center gap-3 mt-2">
@@ -75,18 +77,25 @@ const ProgresoVentasMes = ({ orders = [], user, vistaDe }) => { // vistaDe: nomb
           </div>
 
           <p className="text-sm text-slate-600 mt-2">
-            {r.totalSales <= 0 ? (
+            {r.metaCiclo <= 0 ? (
               <>Todavía no hay ventas registradas este mes.</>
             ) : completo ? (
-              <>🎉 <span className="font-semibold">¡Excelente!</span> Todo lo vendido este mes ya está entregado y cobrado.</>
+              <>🎉 <span className="font-semibold">¡Excelente!</span> Toda la Meta del Ciclo ya está entregada y cobrada.</>
+            ) : r.falta < 0.005 ? (
+              <>✅ Todo lo vendido este mes ya está entregado y cobrado.</>
             ) : (
-              <>💡 Falta por entregar y cobrar <span className="font-bold text-slate-800">{formatoUSD(r.falta)} {monedaActual()}</span> para completar el 100% de lo vendido en el mes.</>
+              <>💡 Falta por entregar y cobrar este mes: <span className="font-bold text-slate-800">{formatoUSD(r.falta)} {monedaActual()}</span></>
             )}
           </p>
 
-          {r.carrySales > 0 && (
-            <p className="text-xs text-indigo-700 font-semibold mt-1.5">
-              + {formatoUSD(r.carrySales)} {monedaActual()} de ventas a crédito del mes anterior ya cobradas ({r.carryCount}) — también suman a la comisión (no cuentan en el %).
+          {(r.carrySales > 0 || r.carryPendiente > 0) && (
+            <p className="text-xs text-slate-500 mt-1.5">
+              {r.carrySales > 0 && (
+                <span className="font-semibold text-indigo-700">Incluye {formatoUSD(r.carrySales)} {monedaActual()} cobrados de créditos del mes anterior{r.carryPendiente > 0 ? ' ' : '.'}</span>
+              )}
+              {r.carryPendiente > 0 && (
+                <>{r.carrySales > 0 ? '(quedan ' : 'Créditos del mes anterior por cobrar: '}<span className="font-semibold text-slate-700">{formatoUSD(r.carryPendiente)} {monedaActual()}</span>{r.carrySales > 0 ? ' pendientes que' : ', que'} también suman a la comisión si se cobran hasta el {limiteCreditos}{r.carrySales > 0 ? ').' : '.'}</>
+              )}
             </p>
           )}
         </div>

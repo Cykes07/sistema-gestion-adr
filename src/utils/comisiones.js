@@ -1,13 +1,3 @@
-// Reglas de comisión compartidas: las usan la pantalla de Estadísticas y la tarjeta "Ventas Finalizadas" del Inicio,
-// para que ambas muestren SIEMPRE los mismos números. Si se cambia una regla, se cambia aquí (una sola vez).
-
-// ===== REGLAS DE COMISIÓN (funciones puras) =====
-// "Finalizada" = FINALIZADA o ARCHIVADA. Fecha de cierre = fecha_pago_saldo || updated_at (no existe otra).
-
-// ¿La venta fue a crédito? Sí si el anticipo o el saldo están en "Crédito", O si la orden tiene fecha de vencimiento
-// de crédito. 🔧 (19-oct, orden 1172) Al cobrar un crédito, Ventas suele cambiar la forma de pago del saldo de "Crédito"
-// a la forma en que realmente pagaron (ej. Transferencia) y la orden perdía el ciclo extra. La fecha de vencimiento
-// solo se puede poner eligiendo "Crédito" y el formulario nunca la borra: es la prueba de que fue venta a crédito.
 export const esVentaACredito = (o) => {
     const esCredito = (v) => { const t = String(v || '').toLowerCase(); return t.includes('crédit') || t.includes('credit'); };
     const tieneFecha = (v) => String(v || '').trim() !== '';
@@ -34,10 +24,6 @@ export const finalizadaPropiaEnRango = (o, dateRange, margenDias) => {
     return true;
 };
 
-// CICLO EXTRA para ventas a crédito: una venta a crédito creada el MES ANTERIOR al del rango, que no alcanzó
-// a cobrarse antes del corte de ese mes (fin de mes + margen), todavía puede sumar si se termina de cobrar
-// hasta el corte de ESTE mes. Si tampoco, caduca (en el mes siguiente ya no cumple la ventana). Devuelve la
-// ventana de fechas o null si el rango no tiene fecha de inicio.
 export const ventanaCicloExtraCredito = (dateRange, margenDias) => {
     if (!dateRange?.start) return null;
     const inicio = new Date(dateRange.start + 'T00:00:00');
@@ -66,6 +52,15 @@ export const creditoDelMesAnteriorEnRango = (o, dateRange, margenDias) => {
     if (isNaN(cerrada.getTime())) return false;
     return cerrada > v.cobradasDespues && cerrada <= v.cobradasHasta;
 };
+
+export const creditoDelMesAnteriorPendiente = (o, dateRange, margenDias, ahora = new Date()) => {
+    const v = ventanaCicloExtraCredito(dateRange, margenDias);
+    if (!v || ahora > v.cobradasHasta) return false;
+    if (['FINALIZADA', 'ARCHIVADA', 'ANULADA'].includes(o.status)) return false;
+    if (!esVentaACredito(o)) return false;
+    const creada = new Date(o.created_at || o.createdAt);
+    return !isNaN(creada.getTime()) && creada >= v.creadasDesde && creada <= v.creadasHasta;
+};
 // ===== FIN REGLAS DE COMISIÓN =====
 
 // Rango de un mes completo ('YYYY-MM-DD'), igual que lo arma la pantalla de Estadísticas.
@@ -76,14 +71,9 @@ export const rangoDelMes = (fechaBase) => {
     return { start: f(new Date(anio, mes, 1)), end: f(new Date(anio, mes + 1, 0)) };
 };
 
-// Resumen de un rango para UN grupo de órdenes (`pertenece` decide cuáles: todas = Admin, las suyas = Vendedor).
-// MISMOS números que la pantalla de Estadísticas:
-//   totalSales = Ventas Totales (órdenes CREADAS en el rango, de cualquier estado — igual que Estadísticas)
-//   propias    = Ventas Finalizadas de las ventas creadas en el rango (base del % de efectividad)
-//   carrySales = crédito del mes anterior cobrado dentro del ciclo extra (suma a la comisión, pero no al %)
-export const resumenVentasMes = (orders, dateRange, margenDias, pertenece = () => true) => {
+export const resumenVentasMes = (orders, dateRange, margenDias, pertenece = () => true, ahora = new Date()) => {
     const monto = (o) => parseFloat(o?.financials?.total || 0) || 0;
-    let totalSales = 0, propias = 0, carrySales = 0, carryCount = 0;
+    let totalSales = 0, propias = 0, carrySales = 0, carryCount = 0, carryPendiente = 0, carryPendienteCount = 0;
     (orders || []).forEach(o => {
         if (!pertenece(o)) return;
         const fechaCreacion = o.created_at || o.createdAt;
@@ -92,7 +82,17 @@ export const resumenVentasMes = (orders, dateRange, margenDias, pertenece = () =
         if (!antes && !despues) totalSales += monto(o);
         if (finalizadaPropiaEnRango(o, dateRange, margenDias)) propias += monto(o);
         else if (creditoDelMesAnteriorEnRango(o, dateRange, margenDias)) { carrySales += monto(o); carryCount += 1; }
+        else if (creditoDelMesAnteriorPendiente(o, dateRange, margenDias, ahora)) { carryPendiente += monto(o); carryPendienteCount += 1; }
     });
     const porcentaje = totalSales > 0 ? (propias / totalSales) * 100 : 0;
-    return { totalSales, propias, carrySales, carryCount, porcentaje, falta: Math.max(0, totalSales - propias) };
+    const metaCiclo = totalSales + carrySales + carryPendiente;
+    const cobradoCiclo = propias + carrySales;
+    const ventana = ventanaCicloExtraCredito(dateRange, margenDias);
+    return {
+        totalSales, propias, carrySales, carryCount, porcentaje, falta: Math.max(0, totalSales - propias),
+        carryPendiente, carryPendienteCount, metaCiclo, cobradoCiclo,
+        porcentajeCiclo: metaCiclo > 0 ? (cobradoCiclo / metaCiclo) * 100 : 0,
+        faltaCiclo: Math.max(0, metaCiclo - cobradoCiclo),
+        limiteCreditosAnteriores: ventana ? ventana.cobradasHasta : null,
+    };
 };

@@ -96,6 +96,7 @@ const ProformasPanel = ({
       const matchesSearch = 
         (proforma.proformaNumber ? proforma.proformaNumber.toString() : proforma.id).toLowerCase().includes(searchLower) ||
         cName.includes(searchLower) ||
+        String(proforma.titulo || proforma.tipo_trabajo || '').toLowerCase().includes(searchLower) || // 🔧 (26-oct) buscar por título
         (proforma.responsable && proforma.responsable.toLowerCase().includes(searchLower));
 
       if (!matchesSearch) return false;
@@ -133,6 +134,10 @@ const ProformasPanel = ({
         case 'cliente':
           aVal = a.cliente_nombre || getClientName(a.cliente);
           bVal = b.cliente_nombre || getClientName(b.cliente);
+          break;
+        case 'titulo':
+          aVal = String(a.titulo || a.tipo_trabajo || '').toLowerCase();
+          bVal = String(b.titulo || b.tipo_trabajo || '').toLowerCase();
           break;
         case 'total':
           aVal = a.financials?.total || a.total || 0;
@@ -233,7 +238,7 @@ const ProformasPanel = ({
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Buscar</label>
             <input 
               type="text" 
-              placeholder="ID, Cliente..." 
+              placeholder="ID, Cliente, Título..." 
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -306,6 +311,9 @@ const ProformasPanel = ({
                 <th className="px-4 py-3 font-bold cursor-pointer hover:bg-slate-200" onClick={() => handleSort('cliente')}>
                   <div className="flex items-center gap-1">Cliente <ArrowUpDown className="h-3 w-3" /></div>
                 </th>
+                <th className="px-4 py-3 font-bold cursor-pointer hover:bg-slate-200" onClick={() => handleSort('titulo')}>
+                  <div className="flex items-center gap-1">Título <ArrowUpDown className="h-3 w-3" /></div>
+                </th>
                 <th className="px-4 py-3 font-bold text-right cursor-pointer hover:bg-slate-200" onClick={() => handleSort('total')}>
                   <div className="flex items-center justify-end gap-1">Total <ArrowUpDown className="h-3 w-3" /></div>
                 </th>
@@ -326,6 +334,10 @@ const ProformasPanel = ({
                     </td>
                     <td className="px-4 py-3 text-slate-800 font-medium max-w-[200px] truncate">
                       {proforma.cliente_nombre || getClientName(proforma.cliente)}
+                    </td>
+                    {/* 🔧 (26-oct) Título / referencia del trabajo (campo obligatorio al crear la cotización) */}
+                    <td className="px-4 py-3 text-slate-600 uppercase text-xs font-semibold max-w-[220px] truncate" title={proforma.titulo || proforma.tipo_trabajo || ''}>
+                      {proforma.titulo || proforma.tipo_trabajo || '-'}
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-slate-900">
                       {formatCurrency(proforma.financials?.total || proforma.total)}
@@ -368,7 +380,7 @@ const ProformasPanel = ({
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan="8" className="px-4 py-12 text-center text-slate-500">
                     No hay proformas registradas.
                   </td>
                 </tr>

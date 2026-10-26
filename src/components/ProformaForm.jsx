@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { Save, X, Plus, Trash2, User, Search, Calculator, FileText, Loader2, UserPlus, Mail, Clock, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/Text';
+import TarifasVolumen from './TarifasVolumen';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
@@ -686,7 +687,7 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
               <div className="overflow-visible border rounded-lg pb-10 bg-white"> 
                 <table className="w-full text-sm">
                    <thead className="bg-slate-100 text-slate-600 font-semibold">
-                      <tr><th className="px-3 py-2 text-left">Descripción</th><th className="px-3 py-2 text-center w-24">Cant.</th><th className="px-3 py-2 text-right w-32">P. Unit</th><th className="px-3 py-2 text-right w-32">Total</th><th className="px-3 py-2 w-10"></th></tr>
+                      <tr><th className="px-3 py-2 text-left">Descripción</th><th className="px-3 py-2 text-center w-36">Cant.</th><th className="px-3 py-2 text-right w-32">P. Unit</th><th className="px-3 py-2 text-right w-32">Total</th><th className="px-3 py-2 w-10"></th></tr>
                    </thead>
                    <tbody className="divide-y divide-slate-100 bg-white">
                       {products.map((row, idx) => {
@@ -822,7 +823,8 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
                                   }}
                                   onBlur={(e) => handleQuantityBlur(idx, e.target.value)} 
                                />
-                               {row.es_por_metro && <span className="absolute bottom-[-2px] left-0 w-full text-center text-[9px] text-purple-600 font-bold leading-tight">Piezas</span>}
+                               {row.es_por_metro && <span className="block w-full text-center text-[9px] text-purple-600 font-bold leading-tight">Piezas</span>}
+                               {cleanDescription && <TarifasVolumen item={row} mayorista={esMayorista} />}
                            </td>
                            <td className="p-2 align-top pt-4">
                                <input 
