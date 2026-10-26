@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { getValidSellers, formatResponsableName, removeDuplicateUsers } from '@/lib/utils';
 import { isUserInList } from '@/utils/userMatch';
 import ClientExpedienteModal from './ClientExpedienteModal';
+import { historialDelCredito, fechaCorta } from '@/utils/historialCredito'; // 🔧 historial del crédito (23-oct)
 
 // 🔧 CAMBIO 10 (Fase 1+2): sin 'CONTABILIDAD'. 'VERIFICACIÓN' se inserta
 // dinámicamente antes de 'FINALIZADA' SOLO si la orden tuvo algún pago
@@ -658,6 +659,9 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
   const lockPorCobrar = order?.status === 'POR COBRAR' && saldoCalculado > 0.01;
 
   const historialCredito = parsedFinancials.historialFechasCredito || [];
+  // 🔧 Respaldo de la venta a crédito: desde cuándo, hasta qué fecha, si pasó a Impagas y cuándo se pagó. Queda visible
+  // aunque Ventas cambie la forma de pago al cobrar o la orden ya esté archivada. Lógica en utils/historialCredito.js.
+  const historialDeCredito = historialDelCredito(order);
 
   // 🔧 CAMBIO 10 (Fase 2): en 'VERIFICACIÓN' solo Admin puede avanzar (a
   // FINALIZADA) — ya cubierto por el `if (isAdmin) return true;` de arriba, así
@@ -1230,6 +1234,30 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                             )}
 
                         </div>
+
+                        {historialDeCredito && (
+                            <div className="mt-6 bg-white border border-amber-200 rounded p-4 shadow-sm">
+                                <div className="flex flex-wrap justify-between items-center gap-2 mb-3 border-b border-amber-100 pb-2">
+                                    <span className="text-amber-800 font-bold text-sm flex items-center gap-1.5"><CreditCard className="h-4 w-4" /> Historial del crédito</span>
+                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                                        historialDeCredito.estado.tipo === 'pagado_a_tiempo' ? 'bg-green-50 text-green-700 border-green-200'
+                                        : historialDeCredito.estado.tipo === 'pagado_tarde' ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                        : historialDeCredito.estado.tipo === 'impaga' ? 'bg-red-50 text-red-700 border-red-200'
+                                        : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{historialDeCredito.estado.texto}</span>
+                                </div>
+                                <ol className="space-y-2">
+                                    {historialDeCredito.eventos.map((ev, idx) => (
+                                        <li key={idx} className="flex gap-3 text-xs">
+                                            <span className="font-mono text-slate-500 w-20 shrink-0">{fechaCorta(ev.fecha)}</span>
+                                            <div>
+                                                <div className={`font-bold ${ev.tipo === 'impaga' ? 'text-red-600' : ev.tipo === 'pagado' ? 'text-green-700' : ev.tipo === 'abono' ? 'text-teal-700' : ev.tipo === 'prorroga' ? 'text-slate-700' : 'text-amber-700'}`}>{ev.titulo}</div>
+                                                {ev.detalle && <div className="text-slate-500">{ev.detalle}</div>}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </div>
+                        )}
 
                         {order.abonos && order.abonos.length > 0 && (
                             <div className="mt-6 border-t border-slate-300 pt-4 animate-in fade-in slide-in-from-top-4 duration-500">
