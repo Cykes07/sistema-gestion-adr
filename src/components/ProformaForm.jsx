@@ -4,6 +4,8 @@ import { Save, X, Plus, Trash2, User, Search, Calculator, FileText, Loader2, Use
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/Text';
 import TarifasVolumen from './TarifasVolumen';
+import StockProducto, { useStockDeProductos } from './StockProducto';
+import { componentesDelCatalogo } from '@/utils/inventarioOrden';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
@@ -78,7 +80,7 @@ const getDescPartsForm = (textoCompleto) => {
     return { nombre: textoCompleto.slice(0, idx).trim(), detalle: textoCompleto.slice(idx + 3).trim() };
 };
 
-const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user, initialData = null, nextProformaNumber, onCreateClient, onReloadClients }) => {
+const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], orders = [], user, initialData = null, nextProformaNumber, onCreateClient, onReloadClients }) => {
   // 🔧 CLONAR: una copia llega como initialData SIN id — se prellena igual, pero al guardar debe
   // CREAR una cotización nueva (no actualizar la original). Solo con id se considera "editar".
   const isEditMode = !!(initialData && initialData.id);
@@ -99,6 +101,7 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
   const [products, setProducts] = useState([
     { cantidad: 1, descripcion: '', observaciones: '', precioUnitario: 0, total: 0, base: '', altura: '', venta_minima: 1, precios_escalonados: [], precioBaseOriginal: 0, es_por_metro: false, precio_minimo: 0, precioMinimoManual: '' }
   ]);
+  const { stockPorId, reservado } = useStockDeProductos(products, orders, null);
   
   const [imagenes, setImagenes] = useState([]);
 
@@ -392,7 +395,8 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
             es_por_metro: item.es_por_metro || false,
             precio_minimo: Number(item.precio_minimo) || 0,
             precioMinimoManual: item.es_por_metro ? minCatalogoItem : '',
-            total: item.es_por_metro ? 0 : parseFloat((computedPrice * (minQty > 0 ? minQty : 1)).toFixed(2))
+            total: item.es_por_metro ? 0 : parseFloat((computedPrice * (minQty > 0 ? minQty : 1)).toFixed(2)),
+            componentes: componentesDelCatalogo(item)
         };
 
         if (emptyIndex !== -1) { 
@@ -450,7 +454,8 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
               base: '', altura: '', es_por_metro: product.es_por_metro || false,
               precio_minimo: Number(product.precio_minimo) || 0,
               precioMinimoManual: product.es_por_metro ? minCatalogoProduct : '',
-              total: product.es_por_metro ? 0 : parseFloat(((minQty > 0 ? minQty : 1) * computedPrice).toFixed(2))
+              total: product.es_por_metro ? 0 : parseFloat(((minQty > 0 ? minQty : 1) * computedPrice).toFixed(2)),
+              componentes: componentesDelCatalogo(product)
           };
           if (index === newProducts.length - 1) newProducts.push({ cantidad: 1, descripcion: '', observaciones: '', precioUnitario: 0, total: 0, base: '', altura: '', venta_minima: 1, es_por_metro: false, precio_minimo: 0, precioMinimoManual: '' });
           return newProducts;
@@ -687,7 +692,7 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
               <div className="overflow-visible border rounded-lg pb-10 bg-white"> 
                 <table className="w-full text-sm">
                    <thead className="bg-slate-100 text-slate-600 font-semibold">
-                      <tr><th className="px-3 py-2 text-left">Descripción</th><th className="px-3 py-2 text-center w-36">Cant.</th><th className="px-3 py-2 text-right w-32">P. Unit</th><th className="px-3 py-2 text-right w-32">Total</th><th className="px-3 py-2 w-10"></th></tr>
+                      <tr><th className="px-3 py-2 text-left w-[45%]">Descripción</th><th className="px-3 py-2 text-center w-44">Stock</th><th className="px-3 py-2 text-center w-36">Cant.</th><th className="px-3 py-2 text-right w-32">P. Unit</th><th className="px-3 py-2 text-right w-32">Total</th><th className="px-3 py-2 w-10"></th></tr>
                    </thead>
                    <tbody className="divide-y divide-slate-100 bg-white">
                       {products.map((row, idx) => {
@@ -810,8 +815,11 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
                                   </div>
                               )}
                            </td>
+                           <td className="p-2 align-top pt-3">
+                               {cleanDescription && <StockProducto producto={row} stockPorId={stockPorId} reservado={reservado} />}
+                           </td>
                            <td className="p-2 relative align-top pt-3">
-                               <Input 
+                               <Input
                                   type="number" 
                                   step="1" 
                                   className="w-full text-center border-none bg-transparent focus:ring-0 text-sm p-0 font-bold h-9" 
@@ -861,12 +869,12 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
                    </tbody>
                    <tfoot className="bg-slate-50 text-xs font-medium text-slate-700 border-t border-slate-300">
                       <tr>
-                         <td colSpan="3" className="text-right py-1 px-2">SubTotal</td>
+                         <td colSpan="4" className="text-right py-1 px-2">SubTotal</td>
                          <td className="text-right py-1 px-2">$ {financials.subtotal.toFixed(2)}</td>
                          <td></td>
                       </tr>
                       <tr>
-                         <td colSpan="3" className="text-right py-1 px-2 flex items-center justify-end gap-2">
+                         <td colSpan="4" className="text-right py-1 px-2 flex items-center justify-end gap-2">
                             <span>Descuento</span>
                             <div className="flex items-center border border-slate-300 rounded bg-white overflow-hidden">
                                <span className="text-xs px-2 py-0.5 border-r border-slate-200 outline-none bg-slate-100">$</span>
@@ -905,7 +913,7 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
                          <td></td>
                       </tr>
                       <tr>
-                         <td colSpan="3" className="text-right py-1 px-2 flex items-center justify-end gap-2">
+                         <td colSpan="4" className="text-right py-1 px-2 flex items-center justify-end gap-2">
                              <span>IVA (%)</span>
                              <input 
                                type="number" step="0.01"
@@ -918,7 +926,7 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], user
                          <td></td>
                       </tr>
                       <tr className="bg-slate-100 font-bold text-slate-900 border-t border-slate-300">
-                         <td colSpan="3" className="text-right py-2 px-2">TOTAL</td>
+                         <td colSpan="4" className="text-right py-2 px-2">TOTAL</td>
                          <td className="text-right py-2 px-2">$ {financials.total.toFixed(2)}</td>
                          <td></td>
                       </tr>

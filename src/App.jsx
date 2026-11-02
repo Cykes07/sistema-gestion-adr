@@ -22,6 +22,7 @@ import OrderForm from '@/components/OrderForm';
 import OrderDetailsModal from '@/components/OrderDetailsModal';
 import WorkAreaList from '@/components/WorkAreaList';
 import WorkAreaCalendar from '@/components/WorkAreaCalendar';
+import { esVentaCorta, descontarVentaCorta } from '@/utils/inventarioOrden';
 import ClientsPanel from '@/components/ClientsPanel';
 import ClientForm from '@/components/ClientForm';
 import ProformasPanel from '@/components/ProformasPanel';
@@ -535,7 +536,7 @@ function App() {
       const prefilledOrderData = {
           cliente_id: clienteEncontrado ? clienteEncontrado.id : null,
           cliente_nombre: proforma.cliente_nombre, cliente: proforma.cliente_nombre, ruc: proforma.cliente_identificacion,
-          productos: (proforma.items || []).map(item => ({ cantidad: item.cantidad, descripcion: item.descripcion, observaciones: item.observaciones, precio: item.precioUnitario, total: item.total })),
+          productos: (proforma.items || []).map(item => ({ cantidad: item.cantidad, descripcion: item.descripcion, observaciones: item.observaciones, precio: item.precioUnitario, total: item.total, componentes: item.componentes || [] })),
           financials: { subtotal: proforma.subtotal, iva: proforma.iva, total: proforma.total, ivaPercentage: proforma.iva_percentage || 15, saldo: proforma.total, diasEntrega: proforma.dias_entrega || finData.diasEntrega || 0, descuentoMonto: savedDescuentoMonto },
           descuentoMonto: savedDescuentoMonto,
           dias_entrega: proforma.dias_entrega || finData.diasEntrega || 0,
@@ -635,7 +636,13 @@ function App() {
             }
         }
         try {
-            const { error } = await supabase.from('ordenes').update({ status: nextStatus }).eq('id', order.id);
+            const cambios = { status: nextStatus };
+            if (currentStatus === 'VENTAS' && esVentaCorta(order)) {
+                const { productos, descontados, negativos } = await descontarVentaCorta(order, user.name);
+                if (descontados > 0) cambios.productos = productos;
+                if (negativos.length) toast({ title: "Inventario en negativo", description: `Se vendió más de lo que figura en stock: ${negativos.join(', ')}. Revisa el inventario.`, variant: "warning" });
+            }
+            const { error } = await supabase.from('ordenes').update(cambios).eq('id', order.id);
             if(error) throw error;
             toast({ title: "Estado Actualizado", description: `Orden movida a ${nextStatus}` });
         } catch (error) { toast({ title: "Error", description: "No se pudo actualizar el estado.", variant: "destructive" }); }
@@ -812,7 +819,7 @@ function App() {
                 <ProgresoVentasMes orders={orders} user={usuarioVista} vistaDe={vendedorSel ? vendedorSel.name : undefined} />
             )}
 
-            <Stats orders={orders} user={user} vendedorSeleccionado={vendedorVista} onCambiarVendedor={setVendedorVista} />
+            <Stats orders={orders} user={user} vendedorSeleccionado={vendedorVista} onCambiarVendedor={setVendedorVista} onIrA={handleViewChange} />
             <div className="mt-8"><WorkAreaList key={vendedorSel ? `vista-${vendedorSel.id}` : 'global'} orders={orders} user={usuarioVista} staffUsers={staffUsers} kanbanTasks={kanbanTasks} onKanbanUpdate={handleKanbanUpdate} onKanbanCreate={handleKanbanCreate} onKanbanDelete={handleKanbanDelete} onViewOrder={(o) => handleViewOrder(o, 'tasks')} initialMode='list' onAbonoOrder={handleAbonoOrderRequest} /></div>
           </div>
         );
@@ -841,7 +848,7 @@ function App() {
       {(showForm || cloningOrder || editingOrder) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> 
           <div className="w-full max-w-5xl max-h-[95vh] overflow-y-auto">
-            <OrderForm currentUser={user} clients={clients} staffUsers={staffUsers} orders={orders} onSuccess={handleOrderSuccess} onCancel={() => { setShowForm(false); setCloningOrder(null); setEditingOrder(null); setProformaToConvertId(null); }} initialData={editingOrder || cloningOrder} nextOrderNumber={getNextOrderNumber()} onCheckAvailability={() => setShowAvailabilityModal(true)} onCreateClient={() => { setEditingClient(null); setShowClientFormModal(true); }} />
+            <OrderForm currentUser={user} clients={clients} staffUsers={staffUsers} orders={orders} onSuccess={handleOrderSuccess} onCancel={() => { setShowForm(false); setCloningOrder(null); setEditingOrder(null); setProformaToConvertId(null); }} initialData={editingOrder || cloningOrder} nextOrderNumber={getNextOrderNumber()} onCheckAvailability={(fecha) => setShowAvailabilityModal(fecha || true)} onCreateClient={() => { setEditingClient(null); setShowClientFormModal(true); }} />
           </div>
         </div>
       )}
@@ -850,7 +857,7 @@ function App() {
       
       {showClientFormModal && (<div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4 no-print"><ClientForm user={user} clienteAEditar={editingClient} onSuccess={() => { fetchAllData(); setShowClientFormModal(false); setEditingClient(null); }} onCancel={() => { setShowClientFormModal(false); setEditingClient(null); }} /></div>)}
       
-      {(showProformaForm || editingProforma) && (<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"><div className="w-full max-w-5xl max-h-[95vh] overflow-y-auto"><ProformaForm user={user} clients={clients} staffUsers={staffUsers} initialData={editingProforma} onSuccess={() => { setShowProformaForm(false); setEditingProforma(null); fetchAllData(); }} onCancel={() => { setShowProformaForm(false); setEditingProforma(null); }} nextProformaNumber={getNextProformaNumber()} onCreateClient={() => { setEditingClient(null); setShowClientFormModal(true); }} /></div></div>)}
+      {(showProformaForm || editingProforma) && (<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"><div className="w-full max-w-5xl max-h-[95vh] overflow-y-auto"><ProformaForm user={user} clients={clients} staffUsers={staffUsers} orders={orders} initialData={editingProforma} onSuccess={() => { setShowProformaForm(false); setEditingProforma(null); fetchAllData(); }} onCancel={() => { setShowProformaForm(false); setEditingProforma(null); }} nextProformaNumber={getNextProformaNumber()} onCreateClient={() => { setEditingClient(null); setShowClientFormModal(true); }} /></div></div>)}
 
       {showInvoiceForm && (<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"><div className="w-full max-w-5xl max-h-[95vh] overflow-y-auto h-full"><InvoiceForm user={user} initialOrder={initialInvoiceOrder} nextInvoiceNumber={getNextInvoiceNumber()} onSubmit={handleCreateInvoice} onCancel={() => { setShowInvoiceForm(false); setInitialInvoiceOrder(null); }} /></div></div>)}
       
@@ -858,7 +865,7 @@ function App() {
       
       {viewInvoice && (<InvoiceDetailsModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} onAnulate={handleAnulateInvoice} onViewOrder={(id) => { const o = orders.find(x => x.id === id || x.orderNumber == id || x.order_number == id); if(o) { setViewInvoice(null); handleViewOrder(o); } }} />)}
       
-      {showAvailabilityModal && (<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70] p-4"><div className="w-full max-w-5xl bg-white h-[85vh] rounded-xl shadow-2xl flex flex-col"><div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl"><h3 className="font-bold text-lg">Disponibilidad</h3><Button variant="ghost" size="icon" onClick={() => setShowAvailabilityModal(false)}><X className="h-5 w-5" /></Button></div><div className="flex-1 overflow-hidden p-4"><WorkAreaCalendar orders={orders} onViewOrder={(o) => { setShowAvailabilityModal(false); handleViewOrder(o, 'tasks'); }} /></div></div></div>)}
+      {showAvailabilityModal && (<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70] p-4"><div className="w-full max-w-5xl bg-white h-[85vh] rounded-xl shadow-2xl flex flex-col"><div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl"><h3 className="font-bold text-lg">Disponibilidad</h3><Button variant="ghost" size="icon" onClick={() => setShowAvailabilityModal(false)}><X className="h-5 w-5" /></Button></div><div className="flex-1 overflow-hidden p-4"><WorkAreaCalendar orders={orders} fechaInicial={typeof showAvailabilityModal === 'string' ? showAvailabilityModal : undefined} onViewOrder={(o) => { setShowAvailabilityModal(false); handleViewOrder(o, 'tasks'); }} /></div></div></div>)}
       
       <OrderDetailsModal 
         order={viewOrder} 

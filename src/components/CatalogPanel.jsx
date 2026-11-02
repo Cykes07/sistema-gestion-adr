@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Text';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
+import ComponentesInventarioEditor from './ComponentesInventarioEditor';
 
 const CatalogPanel = ({ user }) => {
   const { toast } = useToast();
@@ -34,7 +35,8 @@ const CatalogPanel = ({ user }) => {
       precios_escalonados: [{ cantidad: '0', precio: '', es_base: true }],
       tienePrecioDistribuidor: false, 
       precios_distribuidor: [],
-      es_por_metro: false 
+      es_por_metro: false,
+      componentes_inventario: []
   });
   
   const [saving, setSaving] = useState(false);
@@ -166,7 +168,8 @@ const CatalogPanel = ({ user }) => {
             precios_escalonados: loadedTiers,
             tienePrecioDistribuidor: hasDistribuidorConfig,
             precios_distribuidor: loadedDistTiers,
-            es_por_metro: item.es_por_metro || false
+            es_por_metro: item.es_por_metro || false,
+            componentes_inventario: Array.isArray(item.componentes_inventario) ? item.componentes_inventario : []
         });
     } else {
         setEditingItem(null);
@@ -177,7 +180,8 @@ const CatalogPanel = ({ user }) => {
             precios_escalonados: [{ cantidad: '0', precio: '', es_base: true }],
             tienePrecioDistribuidor: false, 
             precios_distribuidor: [],
-            es_por_metro: false 
+            es_por_metro: false,
+            componentes_inventario: []
         });
     }
     setIsModalOpen(true);
@@ -254,7 +258,10 @@ const CatalogPanel = ({ user }) => {
               precios_escalonados: cleanedTiers.map(t => ({cantidad: t.cantidad, precio: t.precio})),
               precio_distribuidor: (formData.tienePrecioDistribuidor && baseDistTier) ? baseDistTier.precio : 0,
               precios_distribuidor: formData.tienePrecioDistribuidor ? cleanedDistTiers.map(t => ({cantidad: t.cantidad, precio: t.precio})) : [],
-              es_por_metro: formData.es_por_metro 
+              es_por_metro: formData.es_por_metro,
+              componentes_inventario: (formData.componentes_inventario || [])
+                  .filter(c => Number(c.cantidad) > 0)
+                  .map(c => ({ id: c.id, nombre: c.nombre, unidad: c.unidad || '', cantidad: Number(c.cantidad) }))
           };
 
           if (editingItem) {
@@ -770,8 +777,13 @@ const CatalogPanel = ({ user }) => {
                             </div>
                         </div>
 
+                        <ComponentesInventarioEditor
+                            componentes={formData.componentes_inventario || []}
+                            porMetro={formData.es_por_metro}
+                            onChange={(componentes) => setFormData(prev => ({ ...prev, componentes_inventario: componentes }))}
+                        />
                     </div>
-                    
+
                     <div className="bg-slate-100 p-4 border-t border-slate-200 flex justify-end gap-3 shrink-0">
                         <Button variant="outline" onClick={() => setIsModalOpen(false)} className="bg-white">Cancelar</Button>
                         <Button onClick={handleSave} disabled={saving} className="bg-purple-600 hover:bg-purple-700 text-white min-w-[160px] shadow-md text-base">{saving ? <Loader2 className="h-5 w-5 animate-spin mr-2"/> : <Save className="h-5 w-5 mr-2"/>} {editingItem ? 'Actualizar' : 'Guardar Producto'}</Button>

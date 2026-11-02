@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Calendar as CalIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import StatusBadge from '@/components/StatusBadge';
+import { itemsDeProduccion } from '@/utils/horariosEntrega';
 
 const DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 const MONTHS = [
@@ -10,8 +11,17 @@ const MONTHS = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
-const WorkAreaCalendar = ({ orders = [], onViewOrder }) => {
-  const [currentDate, setCurrentDate] = useState(new Date());
+const cargaDelDia = (dayOrders) => {
+  const items = dayOrders.reduce((s, o) => s + itemsDeProduccion(o), 0);
+  return `${dayOrders.length} ${dayOrders.length === 1 ? 'entrega' : 'entregas'} · ${items} ${items === 1 ? 'ítem' : 'ítems'}`;
+};
+
+const WorkAreaCalendar = ({ orders = [], onViewOrder, fechaInicial }) => {
+  const [currentDate, setCurrentDate] = useState(() => {
+    if (!fechaInicial) return new Date();
+    const [y, m, d] = fechaInicial.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  });
   const [view, setView] = useState('week'); // 'month', 'week', 'day'
 
   // --- Helpers ---
@@ -157,8 +167,11 @@ const WorkAreaCalendar = ({ orders = [], onViewOrder }) => {
 
                    return (
                       <div key={i} className={cn("min-h-[100px] border-b border-r border-slate-200 p-1 flex flex-col transition-colors", !isCurrentMonth ? "bg-slate-100/50" : "bg-white hover:bg-slate-50")}>
-                         <div className={cn("text-xs font-bold mb-1 ml-1 w-6 h-6 flex items-center justify-center rounded-full shadow-sm", isToday ? "bg-blue-600 text-white" : "text-slate-600 bg-slate-100")}>
-                            {date.getDate()}
+                         <div className="flex items-center justify-between mb-1">
+                            <div className={cn("text-xs font-bold ml-1 w-6 h-6 flex items-center justify-center rounded-full shadow-sm", isToday ? "bg-blue-600 text-white" : "text-slate-600 bg-slate-100")}>
+                               {date.getDate()}
+                            </div>
+                            {dayOrders.length > 0 && <span className="text-[9px] font-bold text-slate-500 mr-1">{cargaDelDia(dayOrders)}</span>}
                          </div>
                          <div className="flex-1 overflow-y-auto pr-1">
                             {dayOrders.map(renderEvent)}
@@ -182,6 +195,7 @@ const WorkAreaCalendar = ({ orders = [], onViewOrder }) => {
                          <div className={cn("p-2 text-center border-b border-slate-200", isToday ? "bg-blue-50" : "bg-slate-100")}>
                             <div className={cn("text-xs uppercase font-bold", isToday ? "text-blue-600" : "text-slate-500")}>{DAYS[date.getDay()]}</div>
                             <div className={cn("text-lg font-black", isToday ? "text-blue-700" : "text-slate-800")}>{date.getDate()}</div>
+                            <div className={cn("text-[10px] font-bold mt-0.5", dayOrders.length ? "text-slate-600" : "text-slate-300")}>{dayOrders.length ? cargaDelDia(dayOrders) : 'Sin entregas'}</div>
                          </div>
                          
                          <div className="flex-1 p-2 space-y-2 overflow-y-auto">
@@ -195,7 +209,7 @@ const WorkAreaCalendar = ({ orders = [], onViewOrder }) => {
                                     onClick={() => onViewOrder(order)}
                                     className={cn("p-2 rounded text-xs cursor-pointer hover:shadow-md transition-all", getEventStyle(order))}
                                  >
-                                    <div className="font-black opacity-80 mb-0.5">{timeStr}</div>
+                                    <div className="flex justify-between items-center font-black opacity-80 mb-0.5"><span>{timeStr}</span><span className="text-[9px]">{itemsDeProduccion(order)} ít.</span></div>
                                     <div className="font-bold truncate text-[11px] leading-tight uppercase">{order.tipoLetrero || order.tipo_trabajo}</div>
                                     <div className="truncate opacity-90 text-[10px] mt-1">{order.cliente || order.cliente_nombre}</div>
                                  </div>
@@ -217,6 +231,7 @@ const WorkAreaCalendar = ({ orders = [], onViewOrder }) => {
                  <div className="max-w-4xl mx-auto">
                     <h3 className="text-xl font-bold text-slate-800 mb-6 text-center border-b border-slate-300 pb-4 capitalize">
                        Agenda para el {currentDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                       {getOrdersForDay(currentDate).length > 0 && <span className="block text-sm font-bold text-slate-500 normal-case mt-1">{cargaDelDia(getOrdersForDay(currentDate))}</span>}
                     </h3>
                     <div className="space-y-3">
                        {getOrdersForDay(currentDate).length > 0 ? getOrdersForDay(currentDate).map(order => {
@@ -234,6 +249,7 @@ const WorkAreaCalendar = ({ orders = [], onViewOrder }) => {
                                     <h4 className="font-black text-slate-800 text-lg uppercase">{order.tipoLetrero || order.tipo_trabajo}</h4>
                                     <p className="text-sm font-medium text-slate-600 mt-1">{order.cliente || order.cliente_nombre}</p>
                                  </div>
+                                 <div className="text-xs font-bold text-slate-600 whitespace-nowrap">{itemsDeProduccion(order)} {itemsDeProduccion(order) === 1 ? 'ítem' : 'ítems'}</div>
                                  <div className="hidden md:block">
                                     <StatusBadge status={order.status} />
                                  </div>

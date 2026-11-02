@@ -3,6 +3,10 @@ import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración
 import { precioSegunCatalogo, referenciaCatalogo, redondearAMedio } from '@/utils/preciosProducto';
 import DiferenciaPrecio from './DiferenciaPrecio';
 import TarifasVolumen from './TarifasVolumen';
+import { SelectorHoraEntrega, PanelDisponibilidad } from './DisponibilidadEntrega';
+import { horariosDelDia, fechaLocal } from '@/utils/horariosEntrega';
+import StockProducto, { useStockDeProductos } from './StockProducto';
+import { componentesDelCatalogo, conMaterialesReservados } from '@/utils/inventarioOrden';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import { 
@@ -40,13 +44,6 @@ const ORDER_TYPES = [
   'VENTA CON PRODUCCION (VPVC) (4 pasos)',
   'VENTA CORTA (VC) (2 pasos)'
 ];
-
-const TIME_SLOTS = [];
-for (let h = 8; h <= 20; h++) {
-  const hour = h.toString().padStart(2, '0');
-  if (h === 20) { TIME_SLOTS.push(`${hour}:00`); continue; }
-  ['00', '15', '30', '45'].forEach(m => TIME_SLOTS.push(`${hour}:${m}`));
-}
 
 // 🔧 FIX EGRESS: antes esto devolvía un dataURL base64 gigante guardado directo en las
 // columnas 'comprobantes' e 'imagenes' de la orden. Con varias fotos, cada fila llegaba
@@ -189,7 +186,7 @@ const getDescPartsForm = (textoCompleto) => {
     return { nombre: textoCompleto.slice(0, idx).trim(), detalle: textoCompleto.slice(idx + 3).trim() };
 };
 
-const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], onSuccess, onCancel, initialData = null, mode = 'create', nextOrderNumber, onReloadClients, onCreateClient }) => {
+const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], onSuccess, onCancel, initialData = null, mode = 'create', nextOrderNumber, onReloadClients, onCreateClient, onCheckAvailability }) => {
   const { toast } = useToast();
   const isAdmin = currentUser?.role === 'Administrador';
   const isContabilidad = currentUser?.role === 'Contabilidad'; 
@@ -463,9 +460,34 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
   const rawTimePart = formData.fechaEntrega && formData.fechaEntrega.includes('T') ? formData.fechaEntrega.split('T')[1].slice(0,5) : '12:00';
   const currentTimePart = rawTimePart === '00:00' ? '08:00' : rawTimePart;
 
+  const fechaOriginal = String(initialData?.fecha_entrega || initialData?.fechaEntrega || '');
+  const fechaOriginalDia = fechaOriginal.split('T')[0];
+  const horaOriginal = fechaOriginal.includes('T') ? fechaOriginal.split('T')[1].slice(0, 5).replace(/^00:00$/, '08:00') : '';
+  const horaPropia = isEditMode && currentDatePart === fechaOriginalDia ? horaOriginal : null;
+  const [showDisponibilidad, setShowDisponibilidad] = useState(false);
+  const { stockPorId, reservado } = useStockDeProductos(formData.productos, orders, isEditMode ? initialData.id : null);
+  const fechaDisponibilidad = currentDatePart || fechaLocal();
+  const horariosEntrega = horariosDelDia(orders, currentDatePart, isEditMode ? initialData.id : null);
+  const horariosPanel = currentDatePart ? horariosEntrega : horariosDelDia(orders, fechaDisponibilidad, isEditMode ? initialData.id : null);
+
+  // La hora ya pasada nunca se puede elegir; una ya ocupada por otra entrega solo la puede forzar el Admin.
+  const horaDisponible = (fecha, hora) => {
+    if (isEditMode && fecha === fechaOriginalDia && hora === horaOriginal) return true;
+    const franja = horariosDelDia(orders, fecha, isEditMode ? initialData.id : null).find(h => h.hora === hora);
+    if (!franja) return true;
+    return franja.estado === 'libre' || (franja.estado === 'ocupada' && isAdmin);
+  };
+
   const handleDateTimeChange = (date, time) => {
     if (!date) { setFormData(prev => ({ ...prev, fechaEntrega: '' })); return; }
-    const t = time || '12:00';
+    let t = time || '12:00';
+    if (!horaDisponible(date, t)) {
+        const libre = horariosDelDia(orders, date, isEditMode ? initialData.id : null).find(h => h.estado === 'libre');
+        if (libre) {
+            toast({ title: 'Hora de entrega ajustada', description: `Las ${t} no están disponibles ese día. Se puso la primera hora libre: ${libre.hora}.` });
+            t = libre.hora;
+        }
+    }
     setFormData(prev => ({ ...prev, fechaEntrega: `${date}T${t}:00` }));
   };
 
@@ -630,7 +652,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
             precios_escalonados: item.precios_escalonados || [], precioDistribuidorBase: Number(item.precio_distribuidor) || 0,
             precios_distribuidor: item.precios_distribuidor || [], es_por_metro: item.es_por_metro || false,
             precio_minimo: Number(item.precio_minimo) || 0, precioMinimoManual: item.es_por_metro ? minP : '',
-            observaciones: item.observaciones || '', total: initialTotal
+            observaciones: item.observaciones || '', total: initialTotal, componentes: componentesDelCatalogo(item)
         };
 
         if (emptyIndex !== -1) {
@@ -675,7 +697,8 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
               precioDistribuidorBase: Number(product.precio_distribuidor) || 0, precios_distribuidor: product.precios_distribuidor || [],
               venta_minima: minQty > 0 ? minQty : 1, cantidad: minQty > 0 ? minQty : 1, base: '', altura: '',
               es_por_metro: product.es_por_metro || false, precio_minimo: Number(product.precio_minimo) || 0,
-              precioMinimoManual: product.es_por_metro ? minP : '', observaciones: product.observaciones || '', total: initialTotal
+              precioMinimoManual: product.es_por_metro ? minP : '', observaciones: product.observaciones || '', total: initialTotal,
+              componentes: componentesDelCatalogo(product)
           };
           if (index === newProducts.length - 1) newProducts.push({ descripcion: '', precioUnitario: '', cantidad: 1, base: '', altura: '', total: 0, venta_minima: 1, es_por_metro: false, precio_minimo: 0, precioMinimoManual: '', observaciones: '' });
           return { ...prev, productos: newProducts };
@@ -931,6 +954,11 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
     const validProducts = formData.productos.filter(p => p.descripcion && p.descripcion.trim() !== '');
     if (validProducts.length === 0) { toast({ title: "⚠️ Sin productos", variant: "destructive" }); setLoading(false); return; }
 
+    if (formData.fechaEntrega && mode !== 'payment_only' && !isEffectivelyReadOnly && !horaDisponible(currentDatePart, currentTimePart)) {
+        toast({ title: "Horario de entrega no disponible", description: `Las ${currentTimePart} del ${currentDatePart.split('-').reverse().join('/')} ya pasaron o ya tienen otra entrega. Elige otro horario en "Ver Disponibilidad".`, variant: "destructive" });
+        setLoading(false); return;
+    }
+
     const invalidMetroProducts = validProducts.filter(p => p.es_por_metro && (p.base === '' || p.altura === ''));
     if (invalidMetroProducts.length > 0) { toast({ title: "Medidas Requeridas", description: "Debe colocar base y altura en cm para los productos por metro.", variant: "destructive" }); setLoading(false); return; }
 
@@ -1038,7 +1066,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
             cliente_id: formData.clienteId, cliente_nombre: formData.cliente, tipo_trabajo: finalTitle, tipoOrden: formData.tipoOrden, fecha_entrega: formData.fechaEntrega || null,
             ruc: selectedClientData?.empresa || null, cliente_telefono: selectedClientData?.telefono || null, // 🔧 NUEVO: snapshot de datos del cliente para el recibo
             vendedor: formData.vendedor, vendedor_ids: formData.vendedor_ids || [], notas: formData.notas, prioridad: 'Normal', origenProformaInfo: formData.origenProformaInfo,
-            productos: processedProducts, abonos: abonos, comprobantes: comprobantesDataFinal,
+            productos: processedProducts.map(conMaterialesReservados), abonos: abonos, comprobantes: comprobantesDataFinal,
             financials: { 
                 ...financials, saldo: financials.saldoPendiente, descuentoMonto: formData.descuentoMonto, descuentoVal: formData.descuentoMonto, 
                 ivaPercentage: formData.ivaPercentage, retentionPercent: formData.retentionPercent, retencion: formData.retencion,
@@ -1262,12 +1290,23 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                    )}
                 </div>
                 <label className="col-span-12 md:col-span-2 text-xs font-bold text-slate-700">Fecha entrega:</label>
-                <div className="col-span-12 md:col-span-4 flex items-center gap-2">
-                   <input type="date" className="border border-slate-300 rounded px-2 py-1 text-sm focus:border-blue-500 flex-1" value={currentDatePart} onChange={e => handleDateTimeChange(e.target.value, currentTimePart)} required readOnly={isEffectivelyReadOnly} />
-                   <select className="border border-slate-300 rounded px-2 py-1 text-sm bg-white w-24" value={currentTimePart} onChange={e => handleDateTimeChange(currentDatePart, e.target.value)} disabled={isEffectivelyReadOnly}>
-                     {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
-                   </select>
+                <div className="col-span-12 md:col-span-4 flex flex-wrap items-center gap-2">
+                   <input type="date" className="border border-slate-300 rounded px-2 py-1 text-sm focus:border-blue-500 w-[150px]" value={currentDatePart} onChange={e => handleDateTimeChange(e.target.value, currentTimePart)} required readOnly={isEffectivelyReadOnly} />
+                   <SelectorHoraEntrega value={currentTimePart} onChange={t => handleDateTimeChange(currentDatePart, t)} horarios={horariosEntrega} disabled={isEffectivelyReadOnly} permitirOcupadas={isAdmin} horaPropia={horaPropia} />
+                   <Button type="button" size="sm" onClick={() => setShowDisponibilidad(true)} className="h-7 text-xs px-2 bg-blue-600 hover:bg-blue-700 text-white gap-1 whitespace-nowrap">
+                       <Search className="h-3.5 w-3.5" /> Ver Disponibilidad
+                   </Button>
                 </div>
+                {showDisponibilidad && (
+                   <PanelDisponibilidad
+                       fecha={fechaDisponibilidad}
+                       horarios={horariosPanel}
+                       horaElegida={currentDatePart ? currentTimePart : null}
+                       onElegir={isEffectivelyReadOnly ? null : (t) => { handleDateTimeChange(fechaDisponibilidad, t); setShowDisponibilidad(false); }}
+                       onCalendario={onCheckAvailability ? () => onCheckAvailability(fechaDisponibilidad) : null}
+                       onCerrar={() => setShowDisponibilidad(false)}
+                   />
+                )}
              </div>
           </div>
 
@@ -1292,7 +1331,8 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                    <thead className="bg-[#004080] text-white text-xs">
                       <tr>
                          <th className="py-2 px-2 text-left w-10">#</th>
-                         <th className="py-2 px-2 text-left">Producto y Detalles</th>
+                         <th className="py-2 px-2 text-left w-[40%]">Producto y Detalles</th>
+                         <th className="py-2 px-2 text-center w-44">Stock</th>
                          <th className="py-2 px-2 text-center w-36">Cant.</th>
                          <th className="py-2 px-2 text-right w-32">{formData.productos.some(p => p.es_por_metro && p.descripcion) ? 'Unitario ($ / m²)' : 'Unitario'}</th>
                          <th className="py-2 px-2 text-right w-28">Total</th>
@@ -1436,9 +1476,13 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                                     </div>
                                 )}
                              </td>
-                             
+
+                             <td className="py-2 px-2 align-top pt-3">
+                                 {cleanDescription && <StockProducto producto={row} stockPorId={stockPorId} reservado={reservado} />}
+                             </td>
+
                              <td className="py-2 px-2 relative align-top pt-3">
-                                 <input 
+                                 <input
                                     type="number" step="1" 
                                     className="w-full text-center border-none bg-transparent focus:ring-0 text-sm p-0 font-bold h-9" 
                                     min="1" value={row.cantidad !== undefined ? row.cantidad : ''} 
@@ -1497,12 +1541,12 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                    {/* 🔥 ESTRUCTURA FINANCIERA ACTUALIZADA (NUEVA OPCION DE IVA) 🔥 */}
                    <tfoot className="bg-slate-100 font-medium text-slate-700 border-t border-slate-300 text-xs">
                       <tr>
-                          <td colSpan="4" className="text-right py-1 px-2">SubTotal (Bruto)</td>
+                          <td colSpan="5" className="text-right py-1 px-2">SubTotal (Bruto)</td>
                           <td className="text-right py-1 px-2">$ {financials.subtotal.toFixed(2)}</td>
                           <td></td>
                       </tr>
                       <tr>
-                         <td colSpan="4" className="text-right py-1 px-2 flex items-center justify-end gap-2">
+                         <td colSpan="5" className="text-right py-1 px-2 flex items-center justify-end gap-2">
                             <span className="text-slate-500 font-bold" title="Este valor se restará directamente del Total Final">Ajuste al Total ($)</span>
                             {isBottomReadOnly ? (
                                 <span className="font-bold text-red-600 ml-2">${Number(localDiscountVal || 0).toFixed(2)} ({Number(localDiscountPercent || 0).toFixed(2)}%)</span>
@@ -1539,13 +1583,13 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
 
                       {/* FILA DE BASE IMPONIBLE */}
                       <tr>
-                         <td colSpan="4" className="text-right py-1 px-2 font-bold text-slate-500">Base Imponible</td>
+                         <td colSpan="5" className="text-right py-1 px-2 font-bold text-slate-500">Base Imponible</td>
                          <td className="text-right py-1 px-2 font-bold text-slate-800">$ {financials.baseImponible.toFixed(2)}</td>
                          <td></td>
                       </tr>
 
                       <tr>
-                         <td colSpan="4" className="text-right py-1 px-2 flex items-center justify-end gap-3 whitespace-nowrap">
+                         <td colSpan="5" className="text-right py-1 px-2 flex items-center justify-end gap-3 whitespace-nowrap">
                             {/* NUEVO CHECKBOX: PRECIOS INCLUYEN IVA */}
                             {formData.aplicarIva && (
                                 <div className="flex items-center gap-1 border-r border-slate-300 pr-3">
@@ -1570,12 +1614,12 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                       </tr>
                       
                       <tr className="bg-slate-200 font-bold text-slate-900 border-t border-slate-300">
-                         <td colSpan="4" className="text-right py-2 px-2">TOTAL FACTURA</td>
+                         <td colSpan="5" className="text-right py-2 px-2">TOTAL FACTURA</td>
                          <td className="text-right py-2 px-2">$ {financials.total.toFixed(2)}</td><td></td>
                       </tr>
                       
                       <tr>
-                         <td colSpan="4" className="text-right py-1 px-2 flex items-center justify-end gap-2 whitespace-nowrap">
+                         <td colSpan="5" className="text-right py-1 px-2 flex items-center justify-end gap-2 whitespace-nowrap">
                             <Checkbox 
                                 id="ret-check" 
                                 checked={applyRetention} 
@@ -1649,7 +1693,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                       </tr>
 
                       <tr className="bg-blue-100 font-black text-blue-900 border-t border-slate-300 shadow-inner">
-                         <td colSpan="4" className="text-right py-2 px-2">TOTAL A PAGAR</td>
+                         <td colSpan="5" className="text-right py-2 px-2">TOTAL A PAGAR</td>
                          <td className="text-right py-2 px-2">$ {(financials.total - formData.retencion).toFixed(2)}</td><td></td>
                       </tr>
                    </tfoot>

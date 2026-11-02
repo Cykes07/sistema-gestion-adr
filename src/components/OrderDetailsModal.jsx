@@ -485,6 +485,11 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                                        )}
                                    </div>
 
+                                   {product.materiales_auto && usedMaterials.length > 0 && (
+                                       <div className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+                                           Materiales cargados desde el catálogo. Ajusta las cantidades si usaste otras.
+                                       </div>
+                                   )}
                                    {usedMaterials.length > 0 && (
                                        <div className="text-[10px] text-slate-400 flex items-center gap-1 -mb-1">
                                            {guardandoBorrador ? <><Loader2 className="w-3 h-3 animate-spin"/> Guardando...</> : <><CheckCircle2 className="w-3 h-3 text-green-500"/> Guardado — puedes seguir agregando más adelante</>}
