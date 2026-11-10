@@ -76,6 +76,7 @@ const Sidebar = ({ user, onLogout, currentView, onViewChange, allowedViews = [] 
         { label: 'Nueva Orden', id: 'ordenes-nueva' },
         { label: 'Sin Factura', id: 'ordenes-sin-factura' },
         { label: 'Con Factura', id: 'ordenes-con-factura' },
+        { label: 'Con Retención', id: 'ordenes-con-retencion' },
         { label: 'Crédito', id: 'ordenes-credito' },
         { label: 'Impagas', id: 'ordenes-impagas' },
         { label: 'Vales de Caja', id: 'vales' },

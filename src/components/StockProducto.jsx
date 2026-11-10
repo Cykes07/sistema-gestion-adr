@@ -33,6 +33,7 @@ const ESTILO = {
   insuficiente: { icono: AlertTriangle, color: 'text-amber-500', texto: 'text-amber-700' },
   agotado: { icono: XCircle, color: 'text-red-500', texto: 'text-red-600' },
   desconocido: { icono: AlertTriangle, color: 'text-slate-400', texto: 'text-slate-500' },
+  activo: { icono: Package, color: 'text-amber-500', texto: 'text-slate-500' },
 };
 
 const numero = (n) => Number.isInteger(n) ? n : Number(n).toFixed(2);
@@ -40,6 +41,7 @@ const unidadCorta = (u) => (u && u.trim() ? u.trim() : 'unid.');
 
 const textoDisponible = (c) => {
   if (c.estado === 'desconocido') return 'No está en inventario';
+  if (c.estado === 'activo') return `${numero(c.disponible)}${c.unidad ? ` ${c.unidad}` : ''} en bodega`;
   if (c.estado === 'agotado') return 'Sin stock';
   return `${numero(c.disponible)} disp.`;
 };
@@ -48,11 +50,12 @@ const StockProducto = ({ producto, stockPorId, reservado }) => {
   const filas = stockDeLinea(producto, stockPorId, reservado);
   if (!filas.length) return null;
 
-  const peor = filas.some(f => f.estado === 'agotado') ? 'agotado' : filas.some(f => f.estado === 'insuficiente' || f.estado === 'desconocido') ? 'insuficiente' : 'ok';
+  const descontables = filas.filter(f => f.estado !== 'activo');
+  const peor = descontables.some(f => f.estado === 'agotado') ? 'agotado' : descontables.some(f => f.estado === 'insuficiente' || f.estado === 'desconocido') ? 'insuficiente' : 'ok';
   const cargando = filas.some(f => stockPorId[f.id] === undefined);
   if (cargando) return <div className="text-[10px] text-slate-400 italic text-center">Consultando stock…</div>;
 
-  if (filas.length === 1 && Number(componentesDe(producto)[0].cantidad) === 1) {
+  if (filas.length === 1 && filas[0].estado !== 'activo' && Number(componentesDe(producto)[0].cantidad) === 1) {
     const f = filas[0];
     const e = ESTILO[f.estado];
     const Icono = e.icono;
@@ -81,7 +84,7 @@ const StockProducto = ({ producto, stockPorId, reservado }) => {
           return (
             <div key={f.id} className="flex items-center gap-1.5 text-[11px]" title={f.estado === 'insuficiente' ? `Necesita ${numero(f.necesita)}, hay ${numero(f.disponible)}` : f.nombre}>
               <Icono className={`h-3.5 w-3.5 shrink-0 ${e.color}`} />
-              <span className="flex-1 min-w-0 truncate text-slate-700">{numero(f.necesita)}x {f.nombre}</span>
+              <span className="flex-1 min-w-0 truncate text-slate-700">{f.estado === 'activo' ? <><span className="text-[9px] font-bold uppercase text-amber-600 mr-1">Activo</span>{f.nombre}</> : `${numero(f.necesita)}x ${f.nombre}`}</span>
               <span className={`font-bold whitespace-nowrap ${e.texto}`}>{textoDisponible(f)}</span>
             </div>
           );

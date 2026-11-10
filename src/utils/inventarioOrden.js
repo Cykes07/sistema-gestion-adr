@@ -6,7 +6,10 @@ export const componentesDe = (producto) => (Array.isArray(producto?.componentes)
 
 export const componentesDelCatalogo = (itemCatalogo) => (Array.isArray(itemCatalogo?.componentes_inventario) ? itemCatalogo.componentes_inventario : [])
   .filter(c => c && c.id != null && Number(c.cantidad) > 0)
-  .map(c => ({ id: c.id, nombre: c.nombre, unidad: c.unidad || '', cantidad: Number(c.cantidad) }));
+  .map(c => ({ id: c.id, nombre: c.nombre, unidad: c.unidad || '', cantidad: Number(c.cantidad), ...(c.activo ? { activo: true } : {}) }));
+
+// Los materiales activos (rollos, lonas, tóner) no se descuentan ni se reservan por venta: solo se muestran como referencia.
+export const componentesQueDescuentan = (producto) => componentesDe(producto).filter(c => !c.activo);
 
 const redondear = (n) => Math.round(n * 1000) / 1000;
 
@@ -23,7 +26,7 @@ export const esVentaCorta = (order) => {
 // Al guardar la orden: los materiales del catálogo quedan prellenados (borrador de Producción) y, por eso, reservados.
 // No se toca un producto que Producción ya empezó, ya terminó o cuyos materiales ya editó a mano.
 export const conMaterialesReservados = (producto) => {
-  const componentes = componentesDe(producto);
+  const componentes = componentesQueDescuentan(producto);
   if (!componentes.length) return producto;
   if (['EN_PROCESO', 'FINALIZADO'].includes(producto.estado_prod) || producto.inventario_descontado) return producto;
   if (producto.materiales_borrador && !producto.materiales_auto) return producto;
@@ -55,6 +58,7 @@ export const stockDeLinea = (producto, stockPorId, reservado) => {
   const componentes = componentesDe(producto);
   return componentes.map(c => {
     const fila = stockPorId[c.id];
+    if (c.activo) return { id: c.id, nombre: fila?.nombre || c.nombre, unidad: fila?.unidad || c.unidad || '', necesita: null, disponible: fila ? Number(fila.cantidad) || 0 : null, estado: 'activo' };
     const necesita = redondear(Number(c.cantidad) * (Number(producto.cantidad) || 0));
     const disponible = fila ? redondear((Number(fila.cantidad) || 0) - (reservado[c.id] || 0)) : null;
     const estado = disponible === null ? 'desconocido' : disponible <= 0 ? 'agotado' : disponible < necesita ? 'insuficiente' : 'ok';

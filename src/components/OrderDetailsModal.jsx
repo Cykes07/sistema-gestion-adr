@@ -14,6 +14,7 @@ import { getValidSellers, formatResponsableName, removeDuplicateUsers } from '@/
 import { isUserInList } from '@/utils/userMatch';
 import ClientExpedienteModal from './ClientExpedienteModal';
 import { medidaDelProducto, quitarMedidaDelTexto, referenciaCatalogo } from '@/utils/preciosProducto';
+import MedidaProducto from './MedidaProducto';
 import DiferenciaPrecio from './DiferenciaPrecio';
 import { historialDelCredito, fechaCorta } from '@/utils/historialCredito'; // 🔧 historial del crédito (23-oct)
 
@@ -198,6 +199,25 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
     const [noMaterials, setNoMaterials] = useState(product.sin_materiales_borrador ?? product.sin_materiales ?? false);
     const [guardandoBorrador, setGuardandoBorrador] = useState(false);
     const borradorTimeout = useRef(null);
+
+    // Stock que queda en bodega de cada material de esta fila (para controlar compras de un vistazo).
+    const [stockBodega, setStockBodega] = useState({});
+    const idsMateriales = (status === 'FINALIZADO' ? (product.materiales || []) : usedMaterials).map(m => m.id).filter(id => id != null);
+    const claveMateriales = `${status}|${[...idsMateriales].sort().join(',')}`;
+    useEffect(() => {
+        if (!idsMateriales.length || status === 'PENDIENTE') return;
+        let vigente = true;
+        supabase.from('inventario').select('id, cantidad, unidad').in('id', idsMateriales).then(({ data }) => {
+            if (vigente && data) setStockBodega(Object.fromEntries(data.map(f => [f.id, f])));
+        });
+        return () => { vigente = false; };
+    }, [claveMateriales]);
+    const textoStock = (id) => {
+        const f = stockBodega[id];
+        if (!f) return null;
+        const cant = Number(f.cantidad) || 0;
+        return { cant, texto: `${Number.isInteger(cant) ? cant : cant.toFixed(2)} ${f.unidad || 'unds'}`, agotado: cant <= 0 };
+    };
 
     // Guarda el borrador en la orden (productos jsonb) sin tocar el inventario ni el estado del producto.
     // Los cambios de cantidad se agrupan un poco (debounce) para no escribir en cada tecla.
@@ -410,16 +430,14 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                      <>
                          {conMedidas && (
                              <td className="px-4 py-4 text-center align-top whitespace-nowrap">
-                                 {medida && (
-                                     <>
-                                         <div className="font-bold text-slate-900">{medida.texto}</div>
-                                         <div className="text-xs text-slate-500">({medida.area.toFixed(2)} m² c/u)</div>
-                                     </>
-                                 )}
+                                 {medida && <MedidaProducto producto={product} />}
                              </td>
                          )}
                          {conMedidas && showFinancials && (
-                             <td className="px-4 py-4 text-right text-slate-600 align-top">{product.es_por_metro ? formatCurrency(product.precioUnitario || product.precio) : ''}</td>
+                             <td className="px-4 py-4 text-right text-slate-600 align-top">
+                                 {product.es_por_metro && referencia && <div className="mb-1"><DiferenciaPrecio diferencia={(Number(product.precioUnitario || product.precio) || 0) - referencia.unidad} /></div>}
+                                 {product.es_por_metro ? formatCurrency(product.precioUnitario || product.precio) : ''}
+                             </td>
                          )}
                          <td className="px-4 py-4 text-center text-slate-600 font-bold align-top">{product.cantidad}</td>
                          {showFinancials && <td className="px-4 py-4 text-right font-bold text-slate-800 align-top">{formatCurrency(cantidad > 0 ? total / cantidad : total)}</td>}
@@ -499,7 +517,10 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                                        <div className="space-y-2 bg-white p-2 rounded border border-blue-100 shadow-inner max-h-[250px] overflow-y-auto">
                                            {usedMaterials.map(m => (
                                                <div key={m.id} className="flex items-center gap-2 text-xs">
-                                                   <span className="flex-1 truncate font-medium text-slate-700" title={m.nombre}>{m.nombre}</span>
+                                                   <span className="flex-1 min-w-0 font-medium text-slate-700" title={m.nombre}>
+                                                       <span className="block truncate">{m.nombre}</span>
+                                                       {textoStock(m.id) && <span className={`block text-[9px] font-bold ${textoStock(m.id).agotado ? 'text-red-600' : 'text-slate-400'}`}>En bodega: {textoStock(m.id).texto}</span>}
+                                                   </span>
                                                    <input type="number" min="0.01" step="any" onWheel={e => e.currentTarget.blur()} title="Cantidad usada. Puedes escribir decimales si hace falta (ej. 0.5)." className="w-16 border border-slate-300 rounded px-1 py-1 outline-none focus:border-blue-500 font-mono text-center bg-slate-50" value={m.cant_usada} onChange={e => updateMaterialQty(m.id, e.target.value)} />
                                                    <span className="text-[10px] text-slate-500 w-10 truncate">{m.unidad}</span>
                                                    <button onClick={() => removeMaterial(m.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1 rounded transition-colors"><X className="w-3 h-3"/></button>
@@ -546,9 +567,15 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                                ) : (
                                    <div className="text-[10px] space-y-1">
                                        <div className="font-bold text-slate-400 mb-1 uppercase tracking-wider border-b pb-1">Materiales Consumidos</div>
-                                       {(product.materiales || []).map(m => (
-                                           <div key={m.id} className="flex justify-between items-center text-slate-600"><span className="truncate pr-2">• {m.nombre}</span><span className="font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-1 rounded">{m.cant_usada} <span className="text-[9px] font-normal">{m.unidad}</span></span></div>
-                                       ))}
+                                       {(product.materiales || []).map(m => {
+                                           const stock = textoStock(m.id);
+                                           return (
+                                               <div key={m.id}>
+                                                   <div className="flex justify-between items-center text-slate-600"><span className="truncate pr-2">• {m.nombre}</span><span className="font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-1 rounded">{m.cant_usada} <span className="text-[9px] font-normal">{m.unidad}</span></span></div>
+                                                   {stock && <div className={`pl-2.5 text-[9px] font-bold ${stock.agotado ? 'text-red-600' : 'text-emerald-700'}`}>Stock restante: {stock.texto}</div>}
+                                               </div>
+                                           );
+                                       })}
                                    </div>
                                )}
                            </div>

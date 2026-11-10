@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Building2, Image as ImageIcon, Palette, Percent, Save, Loader2, Upload, RotateCcw, Check, AlertTriangle } from 'lucide-react';
+import { Building2, Image as ImageIcon, Palette, Percent, Save, Loader2, Upload, RotateCcw, Check, AlertTriangle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/Text';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { EMPRESA_POR_DEFECTO, MONEDAS, TEMAS, completarEmpresa, guardarEmpresa, previsualizarEmpresa, imagenADataUrl } from '@/utils/empresa';
+import { EMPRESA_POR_DEFECTO, MONEDAS, TEMAS, INTERVALOS_ENTREGA, completarEmpresa, guardarEmpresa, previsualizarEmpresa, imagenADataUrl } from '@/utils/empresa';
+import { listaDeHorarios } from '@/utils/horariosEntrega';
 
 // 🔧 NUEVO (23-oct): módulo "Configuración de la Empresa" (solo Administrador).
 // Todo lo de aquí se guarda en configuracion_global (fila id = 1): los datos de la empresa en la columna `empresa` (jsonb)
@@ -81,6 +82,7 @@ const ConfiguracionEmpresa = () => {
         if (!String(form.nombre || '').trim()) { toast({ title: 'Falta el nombre', description: 'El nombre comercial es obligatorio.', variant: 'destructive' }); return; }
         const ivaNum = Number(iva);
         if (Number.isNaN(ivaNum) || ivaNum < 0 || ivaNum > 100) { toast({ title: 'IVA no válido', description: 'Escriba un porcentaje entre 0 y 100.', variant: 'destructive' }); return; }
+        if (!form.horaInicioEntrega || !form.horaFinEntrega || form.horaFinEntrega <= form.horaInicioEntrega) { toast({ title: 'Horario de entregas no válido', description: 'La hora de cierre debe ser después de la hora de apertura.', variant: 'destructive' }); return; }
         setGuardando(true);
         try {
             await guardarEmpresa(form, ivaNum);
@@ -253,6 +255,38 @@ const ConfiguracionEmpresa = () => {
                                 <p className="text-xs text-slate-400">Ejemplo: {new Intl.NumberFormat('en-US', { style: 'currency', currency: moneda.codigo }).format(1250.5)}</p>
                             </div>
                         </div>
+                    </CardContent>
+                </Card>
+
+                {/* 5. HORARIO DE ENTREGAS */}
+                <Card className="border-slate-200 shadow-md lg:col-span-2">
+                    <CardHeader className="bg-slate-50 pb-4">
+                        <CardTitle className="flex items-center gap-2 text-slate-800"><Clock className="h-5 w-5" /> Horario de entregas</CardTitle>
+                        <CardDescription>Las horas que se ofrecen al elegir la fecha de entrega de una orden y en "Ver Disponibilidad". Las órdenes ya creadas conservan su hora.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl">
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-slate-700">Primera entrega del día</label>
+                                <Input type="time" value={form.horaInicioEntrega} onChange={(e) => cambiar('horaInicioEntrega', e.target.value)} className="text-lg font-bold" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-slate-700">Última entrega del día</label>
+                                <Input type="time" value={form.horaFinEntrega} onChange={(e) => cambiar('horaFinEntrega', e.target.value)} className="text-lg font-bold" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-slate-700">Cada cuánto</label>
+                                <select value={form.intervaloEntrega} onChange={(e) => cambiar('intervaloEntrega', e.target.value)} className="w-full h-10 border border-slate-300 rounded-md px-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                                    {INTERVALOS_ENTREGA.map(i => <option key={i} value={i}>{i === '60' ? 'Cada hora' : `Cada ${i} minutos`}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        {form.horaInicioEntrega && form.horaFinEntrega && form.horaFinEntrega > form.horaInicioEntrega ? (() => {
+                            const horas = listaDeHorarios({ inicio: form.horaInicioEntrega, fin: form.horaFinEntrega, intervalo: Number(form.intervaloEntrega) });
+                            return <p className="text-xs text-slate-500">Se ofrecerán {horas.length} horarios: {horas[0]}, {horas[1]}{horas.length > 3 ? ' … ' : ', '}{horas[horas.length - 1]}.</p>;
+                        })() : (
+                            <p className="text-xs font-bold text-red-600">La última entrega debe ser después de la primera.</p>
+                        )}
                     </CardContent>
                 </Card>
             </div>

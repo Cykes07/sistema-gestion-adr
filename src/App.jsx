@@ -28,6 +28,9 @@ import ClientForm from '@/components/ClientForm';
 import ProformasPanel from '@/components/ProformasPanel';
 import ProformaForm from '@/components/ProformaForm';
 import ProformaDetailsModal from '@/components/ProformaDetailsModal';
+import ResumenFacturacion from '@/components/ResumenFacturacion';
+import ReporteRetenciones from '@/components/ReporteRetenciones';
+import { enRango, ordenValida, rangoDelMes, retencionDe } from '@/utils/conciliacion';
 import InvoicesPanel from '@/components/InvoicesPanel';
 import InvoiceForm from '@/components/InvoiceForm';
 import InvoiceDetailsModal from '@/components/InvoiceDetailsModal';
@@ -200,6 +203,7 @@ function App() {
   const [paymentOrder, setPaymentOrder] = useState(null);
   const [cloningOrder, setCloningOrder] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
+  const [rangoConciliacion, setRangoConciliacion] = useState(() => rangoDelMes());
   const [vendedorVista, setVendedorVista] = useState(''); // 🔧 Inicio del Admin: vendedor elegido en "Comisiones — Ver" ('' = toda la empresa)
   // 🔧 Configuración de la Empresa (logo, datos, color, moneda): se lee al abrir la app (también en el login) y al entrar.
   const empresa = useEmpresa();
@@ -721,11 +725,20 @@ function App() {
         );
     }
 
+    const propiasDelUsuario = (lista) => user.role === 'Administrador' ? lista : lista.filter(o => isUserInList(o.vendedor_ids, o.vendedor, user));
+    const rucDeOrden = (o) => o.ruc || (clients || []).find(c => c.id === o.cliente_id)?.empresa || '';
+
+    if (currentView === 'ordenes-con-retencion') {
+       return <ReporteRetenciones orders={propiasDelUsuario(orders.filter(o => ordenValida(o) && retencionDe(o) > 0))} rucDe={rucDeOrden} onViewOrder={(o) => handleViewOrder(o, null)} />;
+    }
+
     if (currentView.startsWith('ordenes-')) {
        // 🔧 FIX: "Todas las órdenes" ahora sí incluye las archivadas (antes se
-       // excluían siempre por defecto). Las demás vistas filtradas (sin factura,
-       // con factura, crédito, etc.) siguen sin mostrar archivadas, como antes.
-       let filtered = currentView === 'ordenes-todas' ? [...orders] : orders.filter(o => o.status !== 'ARCHIVADA');
+       // excluían siempre por defecto). Las demás vistas filtradas (crédito, etc.)
+       // siguen sin mostrar archivadas. Con/Sin Factura sirven para conciliar con el
+       // contador: incluyen archivadas, excluyen anuladas y se filtran por fecha.
+       const esConciliacion = currentView === 'ordenes-sin-factura' || currentView === 'ordenes-con-factura';
+       let filtered = currentView === 'ordenes-todas' ? [...orders] : esConciliacion ? orders.filter(ordenValida) : orders.filter(o => o.status !== 'ARCHIVADA');
        
        if (currentView === 'ordenes-activas') {
            filtered = filtered.filter(o => o.status !== 'ANULADA' && o.status !== 'FINALIZADA');
@@ -733,6 +746,7 @@ function App() {
 
        if (currentView === 'ordenes-sin-factura') filtered = filtered.filter(o => !o.financials?.iva);
        if (currentView === 'ordenes-con-factura') filtered = filtered.filter(o => o.financials?.iva > 0);
+       if (esConciliacion) filtered = filtered.filter(o => enRango(o, rangoConciliacion));
        if (currentView === 'ordenes-archivadas') filtered = orders.filter(o => o.status === 'ARCHIVADA');
 
        // 🔧 FIX: antes "Crédito" solo miraba si el método de pago DECÍA "Crédito", sin
@@ -767,8 +781,11 @@ function App() {
        return (
           <div className="space-y-6 animate-in fade-in">
             {(user.role === 'Administrador' || user.role === 'Vendedor') && <Stats orders={orders} user={user} />}
+            {esConciliacion && user.role !== 'Producción' && (
+                <ResumenFacturacion ordenes={propiasDelUsuario(filtered)} conFactura={currentView === 'ordenes-con-factura'} rango={rangoConciliacion} onCambiarRango={setRangoConciliacion} rucDe={rucDeOrden} />
+            )}
             <OrdersPanel 
-                orders={filtered} 
+                orders={filtered}  
                 user={user} 
                 staffUsers={staffUsers}
                 onUpdateStatus={() => {}} 
@@ -861,7 +878,7 @@ function App() {
 
       {showInvoiceForm && (<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"><div className="w-full max-w-5xl max-h-[95vh] overflow-y-auto h-full"><InvoiceForm user={user} initialOrder={initialInvoiceOrder} nextInvoiceNumber={getNextInvoiceNumber()} onSubmit={handleCreateInvoice} onCancel={() => { setShowInvoiceForm(false); setInitialInvoiceOrder(null); }} /></div></div>)}
       
-      {viewProforma && (<ProformaDetailsModal proforma={viewProforma} onClose={() => setViewProforma(null)} onEdit={(p) => { setViewProforma(null); setEditingProforma(p); }} onConvert={(p) => handleConvertProformaToOrder(p)} onUpdateProforma={async (updates) => { try { await supabase.from('proformas').update(updates).eq('id', viewProforma.id); fetchAllData(); toast({ title: "Proforma Actualizada" }); } catch (error) { console.error(error); } }} user={user} staffUsers={staffUsers} />)}
+      {viewProforma && (<ProformaDetailsModal proforma={viewProforma} clients={clients} onClose={() => setViewProforma(null)} onEdit={(p) => { setViewProforma(null); setEditingProforma(p); }} onConvert={(p) => handleConvertProformaToOrder(p)} onUpdateProforma={async (updates) => { try { await supabase.from('proformas').update(updates).eq('id', viewProforma.id); fetchAllData(); toast({ title: "Proforma Actualizada" }); } catch (error) { console.error(error); } }} user={user} staffUsers={staffUsers} />)}
       
       {viewInvoice && (<InvoiceDetailsModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} onAnulate={handleAnulateInvoice} onViewOrder={(id) => { const o = orders.find(x => x.id === id || x.orderNumber == id || x.order_number == id); if(o) { setViewInvoice(null); handleViewOrder(o); } }} />)}
       

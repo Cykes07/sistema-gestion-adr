@@ -30,6 +30,7 @@ const ComponentesInventarioEditor = ({ componentes = [], onChange, porMetro = fa
   };
 
   const cambiarCantidad = (id, valor) => onChange(componentes.map(c => String(c.id) === String(id) ? { ...c, cantidad: valor } : c));
+  const cambiarActivo = (id, activo) => onChange(componentes.map(c => String(c.id) === String(id) ? { ...c, activo } : c));
   const quitar = (id) => onChange(componentes.filter(c => String(c.id) !== String(id)));
 
   return (
@@ -40,12 +41,16 @@ const ComponentesInventarioEditor = ({ componentes = [], onChange, porMetro = fa
           Lo que sale del inventario por cada {porMetro ? 'pieza' : 'unidad'} vendida. Un producto simple lleva un solo ítem; un kit lleva varios
           (ej. 1 identificador, 4 separadores, 3 plantas). Déjalo vacío si no usa inventario.
         </p>
+        <p className="text-xs text-slate-500 mt-1">
+          <b>Material activo:</b> insumos que salen enteros a la máquina (rollo de vinil, lona, tóner). Se muestran como referencia, pero
+          no se descuentan ni se cargan a Producción por cada venta.
+        </p>
       </div>
 
       {componentes.length > 0 && (
         <div className="space-y-2">
           {componentes.map(c => (
-            <div key={c.id} className="flex items-center gap-2 p-2 rounded border border-slate-200 bg-slate-50">
+            <div key={c.id} className={`flex flex-wrap items-center gap-2 p-2 rounded border ${c.activo ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-slate-50'}`}>
               <input
                 type="number" min="0" step="any" value={c.cantidad}
                 onChange={e => cambiarCantidad(c.id, e.target.value)}
@@ -55,6 +60,10 @@ const ComponentesInventarioEditor = ({ componentes = [], onChange, porMetro = fa
               <span className="text-xs font-bold text-slate-500">x</span>
               <span className="flex-1 min-w-0 truncate text-sm font-semibold text-slate-800" title={c.nombre}>{c.nombre}</span>
               {c.unidad && <span className="text-[10px] text-slate-500 whitespace-nowrap">{c.unidad}</span>}
+              <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer select-none whitespace-nowrap" title="No descontar de inventario por orden de venta">
+                <input type="checkbox" checked={!!c.activo} onChange={e => cambiarActivo(c.id, e.target.checked)} className="h-4 w-4 accent-amber-600" />
+                Material activo <span className="font-normal text-slate-400">(no descontar por venta)</span>
+              </label>
               <button type="button" onClick={() => quitar(c.id)} className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
             </div>
           ))}

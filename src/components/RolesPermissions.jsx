@@ -16,6 +16,7 @@ const ALL_MENU_ITEMS = [
   { id: 'ordenes-nueva', label: 'Crear Nueva Orden', category: 'Producción' },
   { id: 'ordenes-sin-factura', label: 'Filtro: Sin Factura', category: 'Producción' },
   { id: 'ordenes-con-factura', label: 'Filtro: Con Factura', category: 'Producción' },
+  { id: 'ordenes-con-retencion', label: 'Reporte: Con Retención', category: 'Producción' },
   { id: 'ordenes-credito', label: 'Filtro: Crédito', category: 'Producción' },
   { id: 'ordenes-impagas', label: 'Filtro: Impagas', category: 'Producción' },
   { id: 'vales', label: 'Vales de Caja', category: 'Producción' }, // <-- DEVUELTO AQUÍ

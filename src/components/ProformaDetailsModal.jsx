@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { empresaActual, monedaActual } from '@/utils/empresa'; // 🔧 Configuración de la Empresa
 import { X, Printer, CheckCircle2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import DiferenciaPrecio from './DiferenciaPrecio';
+import MedidaProducto from './MedidaProducto';
+import { medidaDelProducto, quitarMedidaDelTexto, referenciaCatalogo } from '@/utils/preciosProducto';
 
 // --- 🔥 FUNCIÓN ESTRICTA PARA LIMPIAR NOTAS DEL PDF 🔥 ---
 const getPrintDesc = (prod) => {
@@ -28,7 +31,8 @@ const ProformaDetailsModal = ({
   onClose, 
   onConvert, 
   onEdit,
-  user
+  user,
+  clients = []
 }) => {
   const [converting, setConverting] = useState(false);
 
@@ -82,6 +86,11 @@ const ProformaDetailsModal = ({
       data.financials.anticipoValor = data.financials.total * (data.financials.anticipoPorc / 100);
       data.financials.saldoValor = data.financials.total - data.financials.anticipoValor;
   }
+
+  const hayMedidas = data.productos.some(p => medidaDelProducto(p));
+  const rucCliente = String(proforma.cliente_identificacion || '').trim();
+  const clienteMayorista = !!(clients.find(c => rucCliente && String(c.empresa || '').trim() === rucCliente)
+      || clients.find(c => String(c.nombre || '').trim().toUpperCase() === String(proforma.cliente_nombre || '').trim().toUpperCase()))?.es_mayorista;
 
   const handleConvertClick = async () => {
     setConverting(true);
@@ -140,31 +149,43 @@ const ProformaDetailsModal = ({
                       <table className="w-full text-sm">
                           <thead className="bg-slate-100 text-slate-600 font-semibold">
                               <tr>
-                                  <th className="px-4 py-2 text-center w-16">Cant.</th>
                                   <th className="px-4 py-2 text-left">Descripción</th>
-                                  <th className="px-4 py-2 text-right">P. Unit</th>
+                                  {hayMedidas && <th className="px-4 py-2 text-center">Medida</th>}
+                                  {hayMedidas && <th className="px-4 py-2 text-right whitespace-nowrap">P. Base ($/m²)</th>}
+                                  <th className="px-4 py-2 text-center w-16">Cant.</th>
+                                  <th className="px-4 py-2 text-right whitespace-nowrap">P. Unit</th>
                                   <th className="px-4 py-2 text-right">Total</th>
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                              {data.productos.map((prod, idx) => (
-                                  <tr key={idx}>
-                                      <td className="px-4 py-2 text-center text-slate-500">{prod.cantidad}</td>
-                                      <td className="px-4 py-2 font-medium uppercase whitespace-pre-wrap">
-                                          {(() => {
-                                              const { nombre, detalle } = getPrintDescParts(prod);
-                                              return (
-                                                  <>
-                                                      <div className="font-bold">{nombre}</div>
-                                                      {detalle && <div className="font-normal normal-case text-xs text-slate-500 mt-0.5">{detalle}</div>}
-                                                  </>
-                                              );
-                                          })()}
-                                      </td>
-                                      <td className="px-4 py-2 text-right text-slate-600">{formatCurrency((prod.total || (prod.cantidad * prod.precioUnitario)) / (prod.cantidad || 1))}</td>
-                                      <td className="px-4 py-2 text-right font-semibold text-slate-900">{formatCurrency(prod.total || (prod.cantidad * prod.precioUnitario))}</td>
-                                  </tr>
-                              ))}
+                              {data.productos.map((prod, idx) => {
+                                  const cantidad = Number(prod.cantidad) || 0;
+                                  const total = Number(prod.total) || (cantidad * (Number(prod.precioUnitario) || 0));
+                                  const referencia = referenciaCatalogo(prod, clienteMayorista);
+                                  const medida = medidaDelProducto(prod);
+                                  const { nombre, detalle } = getPrintDescParts(medida ? { ...prod, descripcion: quitarMedidaDelTexto(prod.descripcion) } : prod);
+                                  return (
+                                      <tr key={idx} className="align-top">
+                                          <td className="px-4 py-2 font-medium uppercase whitespace-pre-wrap">
+                                              <div className="font-bold">{nombre}</div>
+                                              {detalle && <div className="font-normal normal-case text-xs text-slate-500 mt-0.5">{detalle}</div>}
+                                          </td>
+                                          {hayMedidas && <td className="px-4 py-2 text-center whitespace-nowrap">{medida && <MedidaProducto producto={prod} />}</td>}
+                                          {hayMedidas && (
+                                              <td className="px-4 py-2 text-right text-slate-600">
+                                                  {prod.es_por_metro && referencia && <div className="mb-1"><DiferenciaPrecio diferencia={(Number(prod.precioUnitario) || 0) - referencia.unidad} /></div>}
+                                                  {prod.es_por_metro ? formatCurrency(prod.precioUnitario) : ''}
+                                              </td>
+                                          )}
+                                          <td className="px-4 py-2 text-center text-slate-500">{prod.cantidad}</td>
+                                          <td className="px-4 py-2 text-right text-slate-600">{formatCurrency(total / (cantidad || 1))}</td>
+                                          <td className="px-4 py-2 text-right font-semibold text-slate-900">
+                                              {referencia && <div className="mb-1"><DiferenciaPrecio diferencia={total - referencia.total} /></div>}
+                                              {formatCurrency(total)}
+                                          </td>
+                                      </tr>
+                                  );
+                              })}
                           </tbody>
                       </table>
                   </div>

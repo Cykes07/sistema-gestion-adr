@@ -261,7 +261,7 @@ const CatalogPanel = ({ user }) => {
               es_por_metro: formData.es_por_metro,
               componentes_inventario: (formData.componentes_inventario || [])
                   .filter(c => Number(c.cantidad) > 0)
-                  .map(c => ({ id: c.id, nombre: c.nombre, unidad: c.unidad || '', cantidad: Number(c.cantidad) }))
+                  .map(c => ({ id: c.id, nombre: c.nombre, unidad: c.unidad || '', cantidad: Number(c.cantidad), ...(c.activo ? { activo: true } : {}) }))
           };
 
           if (editingItem) {

@@ -1330,8 +1330,8 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                 <table className="w-full text-sm">
                    <thead className="bg-[#004080] text-white text-xs">
                       <tr>
-                         <th className="py-2 px-2 text-left w-10">#</th>
-                         <th className="py-2 px-2 text-left w-[40%]">Producto y Detalles</th>
+                         <th className="py-2 px-1 text-center w-8">#</th>
+                         <th className="py-2 px-2 text-left">Producto y Detalles</th>
                          <th className="py-2 px-2 text-center w-44">Stock</th>
                          <th className="py-2 px-2 text-center w-36">Cant.</th>
                          <th className="py-2 px-2 text-right w-32">{formData.productos.some(p => p.es_por_metro && p.descripcion) ? 'Unitario ($ / m²)' : 'Unitario'}</th>
@@ -1366,7 +1366,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
 
                         return (
                           <tr key={idx} className="hover:bg-slate-50 group">
-                             <td className="py-2 px-2 text-slate-400 text-xs text-center align-top pt-4">{idx + 1}</td>
+                             <td className="py-2 px-1 text-slate-400 text-xs text-center align-top pt-4">{idx + 1}</td>
                              
                              <td className="py-2 px-2 relative align-top pt-3">
                                 {(() => {
@@ -1546,7 +1546,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                           <td></td>
                       </tr>
                       <tr>
-                         <td colSpan="5" className="text-right py-1 px-2 flex items-center justify-end gap-2">
+                         <td colSpan="5" className="text-right py-1 px-2"><div className="flex items-center justify-end gap-2">
                             <span className="text-slate-500 font-bold" title="Este valor se restará directamente del Total Final">Ajuste al Total ($)</span>
                             {isBottomReadOnly ? (
                                 <span className="font-bold text-red-600 ml-2">${Number(localDiscountVal || 0).toFixed(2)} ({Number(localDiscountPercent || 0).toFixed(2)}%)</span>
@@ -1577,7 +1577,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                                     />
                                 </>
                             )}
-                         </td>
+                         </div></td>
                          <td className="text-right py-1 px-2 text-red-500">- $ {financials.descuentoVal.toFixed(2)}</td><td></td>
                       </tr>
 
@@ -1589,7 +1589,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                       </tr>
 
                       <tr>
-                         <td colSpan="5" className="text-right py-1 px-2 flex items-center justify-end gap-3 whitespace-nowrap">
+                         <td colSpan="5" className="text-right py-1 px-2"><div className="flex items-center justify-end gap-3 whitespace-nowrap">
                             {/* NUEVO CHECKBOX: PRECIOS INCLUYEN IVA */}
                             {formData.aplicarIva && (
                                 <div className="flex items-center gap-1 border-r border-slate-300 pr-3">
@@ -1609,7 +1609,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                                     IVA {isAdmin && !isBottomReadOnly ? (<span className="flex items-center">(<input type="number" className="w-8 text-center bg-transparent border-b border-slate-400 text-xs focus:outline-none focus:border-blue-600" value={formData.ivaPercentage} onChange={(e) => setFormData({...formData, ivaPercentage: parseFloat(e.target.value) || 0})} />%)</span>) : (<span>({formData.ivaPercentage}%)</span>)}
                                 </label>
                             </div>
-                         </td>
+                         </div></td>
                          <td className="text-right py-1 px-2">$ {financials.iva.toFixed(2)}</td><td></td>
                       </tr>
                       
@@ -1619,7 +1619,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                       </tr>
                       
                       <tr>
-                         <td colSpan="5" className="text-right py-1 px-2 flex items-center justify-end gap-2 whitespace-nowrap">
+                         <td colSpan="5" className="text-right py-1 px-2"><div className="flex items-center justify-end gap-2 whitespace-nowrap">
                             <Checkbox 
                                 id="ret-check" 
                                 checked={applyRetention} 
@@ -1660,7 +1660,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                             {applyRetention && !canEditRetention && (
                                 <span className="text-orange-700 font-bold ml-2">({parseFloat(Number(formData.retentionPercent || 0).toFixed(2))}%)</span>
                             )}
-                         </td>
+                         </div></td>
                          <td className="text-right py-1 px-2 text-orange-600 font-bold">
                              {applyRetention ? (
                                  <div className="flex items-center justify-end gap-1">

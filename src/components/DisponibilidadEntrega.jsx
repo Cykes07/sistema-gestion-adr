@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Clock, Lock, CheckCircle2, CalendarDays, Info, X } from 'lucide-react';
-import { HORARIOS_ENTREGA, textoItems } from '@/utils/horariosEntrega';
+import { listaDeHorarios, textoItems } from '@/utils/horariosEntrega';
 
 const pasoDe = (orden) => orden.status === 'PRODUCCION'
   ? { texto: 'Producción', punto: 'bg-orange-400' }
@@ -24,7 +24,7 @@ export const SelectorHoraEntrega = ({ value, onChange, horarios, disabled, permi
     return () => document.removeEventListener('mousedown', cerrar);
   }, [abierto]);
 
-  const opciones = HORARIOS_ENTREGA.includes(value)
+  const opciones = listaDeHorarios().includes(value)
     ? horarios
     : [{ hora: value, estado: 'libre', ordenes: [], items: 0 }, ...horarios];
 

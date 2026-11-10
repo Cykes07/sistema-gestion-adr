@@ -16,7 +16,13 @@ export const EMPRESA_POR_DEFECTO = {
     favicon: '',
     color: 'azul',
     moneda: 'USD',
+    horaInicioEntrega: '08:00',
+    horaFinEntrega: '20:00',
+    intervaloEntrega: '30',
 };
+
+export const INTERVALOS_ENTREGA = ['15', '30', '60'];
+const horaValida = (h) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(h));
 
 export const MONEDAS = [
     { codigo: 'USD', nombre: 'Dólar estadounidense', simbolo: '$' },
@@ -104,6 +110,11 @@ export const completarEmpresa = (guardado) => {
     if (!out.logo) out.logo = EMPRESA_POR_DEFECTO.logo;
     if (!out.nombre.trim()) out.nombre = EMPRESA_POR_DEFECTO.nombre;
     if (!MONEDAS.some(m => m.codigo === out.moneda)) out.moneda = 'USD';
+    if (!INTERVALOS_ENTREGA.includes(out.intervaloEntrega)) out.intervaloEntrega = EMPRESA_POR_DEFECTO.intervaloEntrega;
+    if (!horaValida(out.horaInicioEntrega) || !horaValida(out.horaFinEntrega) || out.horaFinEntrega <= out.horaInicioEntrega) {
+        out.horaInicioEntrega = EMPRESA_POR_DEFECTO.horaInicioEntrega;
+        out.horaFinEntrega = EMPRESA_POR_DEFECTO.horaFinEntrega;
+    }
     return out;
 };
 
