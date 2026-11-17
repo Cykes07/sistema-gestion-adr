@@ -19,7 +19,31 @@ export const EMPRESA_POR_DEFECTO = {
     horaInicioEntrega: '08:00',
     horaFinEntrega: '20:00',
     intervaloEntrega: '30',
+    moduloInventario: 'si',
+    moduloComisiones: 'si',
 };
+
+// Módulos que el Administrador puede apagar (Configuración de la Empresa → Módulos del Sistema). Apagado = sus pantallas
+// salen del menú y las demás pantallas esconden sus partes. Para un módulo nuevo: agregarlo aquí y en EMPRESA_POR_DEFECTO.
+export const MODULOS = [
+    {
+        id: 'inventario', campo: 'moduloInventario', nombre: 'Inventario',
+        descripcion: 'Control de stock, compras, auditoría de consumo y componentes de inventario en el catálogo. Apagado, el sistema trabaja en modo servicio / orden libre: se vende y se produce sin descontar materiales.',
+        vistas: ['inventario-ver', 'inventario-gestionar'],
+    },
+    {
+        id: 'comisiones', campo: 'moduloComisiones', nombre: 'Comisiones y Rendimiento',
+        descripcion: 'Reporte de comisiones, metas de cobro por vendedor ("Ventas Finalizadas" del Inicio) y el desglose de ventas por vendedor en Estadísticas.',
+        vistas: [],
+    },
+];
+
+export const moduloActivo = (id, emp = actual) => {
+    const m = MODULOS.find(x => x.id === id);
+    return !m || emp[m.campo] !== 'no';
+};
+export const vistaDisponible = (vista, emp = actual) => !MODULOS.some(m => m.vistas.includes(vista) && !moduloActivo(m.id, emp));
+export const useModulo = (id) => moduloActivo(id, useEmpresa());
 
 export const INTERVALOS_ENTREGA = ['15', '30', '60'];
 const horaValida = (h) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(h));
@@ -111,6 +135,7 @@ export const completarEmpresa = (guardado) => {
     if (!out.nombre.trim()) out.nombre = EMPRESA_POR_DEFECTO.nombre;
     if (!MONEDAS.some(m => m.codigo === out.moneda)) out.moneda = 'USD';
     if (!INTERVALOS_ENTREGA.includes(out.intervaloEntrega)) out.intervaloEntrega = EMPRESA_POR_DEFECTO.intervaloEntrega;
+    MODULOS.forEach(m => { if (out[m.campo] !== 'no') out[m.campo] = 'si'; });
     if (!horaValida(out.horaInicioEntrega) || !horaValida(out.horaFinEntrega) || out.horaFinEntrega <= out.horaInicioEntrega) {
         out.horaInicioEntrega = EMPRESA_POR_DEFECTO.horaInicioEntrega;
         out.horaFinEntrega = EMPRESA_POR_DEFECTO.horaFinEntrega;

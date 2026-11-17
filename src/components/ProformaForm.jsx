@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/Text';
 import TarifasVolumen from './TarifasVolumen';
 import StockProducto, { useStockDeProductos } from './StockProducto';
+import { useModulo } from '@/utils/empresa';
 import { componentesDelCatalogo } from '@/utils/inventarioOrden';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -102,6 +103,8 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], orde
     { cantidad: 1, descripcion: '', observaciones: '', precioUnitario: 0, total: 0, base: '', altura: '', venta_minima: 1, precios_escalonados: [], precioBaseOriginal: 0, es_por_metro: false, precio_minimo: 0, precioMinimoManual: '' }
   ]);
   const { stockPorId, reservado } = useStockDeProductos(products, orders, null);
+  const conInventario = useModulo('inventario');
+  const columnasAntesDelTotal = conInventario ? 4 : 3;
   
   const [imagenes, setImagenes] = useState([]);
 
@@ -692,7 +695,7 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], orde
               <div className="overflow-visible border rounded-lg pb-10 bg-white"> 
                 <table className="w-full text-sm">
                    <thead className="bg-slate-100 text-slate-600 font-semibold">
-                      <tr><th className="px-3 py-2 text-left w-[45%]">Descripción</th><th className="px-3 py-2 text-center w-44">Stock</th><th className="px-3 py-2 text-center w-36">Cant.</th><th className="px-3 py-2 text-right w-32">P. Unit</th><th className="px-3 py-2 text-right w-32">Total</th><th className="px-3 py-2 w-10"></th></tr>
+                      <tr><th className="px-3 py-2 text-left w-[45%]">Descripción</th>{conInventario && <th className="px-3 py-2 text-center w-44">Stock</th>}<th className="px-3 py-2 text-center w-36">Cant.</th><th className="px-3 py-2 text-right w-32">P. Unit</th><th className="px-3 py-2 text-right w-32">Total</th><th className="px-3 py-2 w-10"></th></tr>
                    </thead>
                    <tbody className="divide-y divide-slate-100 bg-white">
                       {products.map((row, idx) => {
@@ -815,9 +818,11 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], orde
                                   </div>
                               )}
                            </td>
+                           {conInventario && (
                            <td className="p-2 align-top pt-3">
                                {cleanDescription && <StockProducto producto={row} stockPorId={stockPorId} reservado={reservado} />}
                            </td>
+                           )}
                            <td className="p-2 relative align-top pt-3">
                                <Input
                                   type="number" 
@@ -869,12 +874,12 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], orde
                    </tbody>
                    <tfoot className="bg-slate-50 text-xs font-medium text-slate-700 border-t border-slate-300">
                       <tr>
-                         <td colSpan="4" className="text-right py-1 px-2">SubTotal</td>
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-1 px-2">SubTotal</td>
                          <td className="text-right py-1 px-2">$ {financials.subtotal.toFixed(2)}</td>
                          <td></td>
                       </tr>
                       <tr>
-                         <td colSpan="4" className="text-right py-1 px-2 flex items-center justify-end gap-2">
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-1 px-2"><div className="flex items-center justify-end gap-2">
                             <span>Descuento</span>
                             <div className="flex items-center border border-slate-300 rounded bg-white overflow-hidden">
                                <span className="text-xs px-2 py-0.5 border-r border-slate-200 outline-none bg-slate-100">$</span>
@@ -908,25 +913,25 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], orde
                                />
                                <span className="text-xs px-2 py-0.5 border-l border-slate-200 bg-slate-100">%</span>
                             </div>
-                         </td>
+                         </div></td>
                          <td className="text-right py-1 px-2 text-red-500">- $ {financials.descuento.toFixed(2)}</td>
                          <td></td>
                       </tr>
                       <tr>
-                         <td colSpan="4" className="text-right py-1 px-2 flex items-center justify-end gap-2">
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-1 px-2"><div className="flex items-center justify-end gap-2">
                              <span>IVA (%)</span>
-                             <input 
+                             <input
                                type="number" step="0.01"
                                className="w-12 text-right border border-slate-300 rounded px-1 text-xs"
                                value={ivaPercentage}
                                onChange={e => setIvaPercentage(parseFloat(e.target.value) || 0)}
                              />
-                         </td>
+                         </div></td>
                          <td className="text-right py-1 px-2">$ {financials.iva.toFixed(2)}</td>
                          <td></td>
                       </tr>
                       <tr className="bg-slate-100 font-bold text-slate-900 border-t border-slate-300">
-                         <td colSpan="4" className="text-right py-2 px-2">TOTAL</td>
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-2 px-2">TOTAL</td>
                          <td className="text-right py-2 px-2">$ {financials.total.toFixed(2)}</td>
                          <td></td>
                       </tr>

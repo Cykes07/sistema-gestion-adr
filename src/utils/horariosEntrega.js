@@ -31,15 +31,25 @@ export const franjaDe = (fechaEntrega, horario = horarioConfigurado()) => {
   return aHora(inicio + Math.floor((minutos - inicio) / horario.intervalo) * horario.intervalo);
 };
 
-export const itemsDeProduccion = (orden) =>
-  (orden.productos || []).filter(p => String(p?.descripcion || p?.nombre || '').trim() !== '').length;
+const productosReales = (orden) => (orden.productos || []).filter(p => String(p?.descripcion || p?.nombre || '').trim() !== '');
+
+export const itemsDeProduccion = (orden) => productosReales(orden).length;
+
+// Una orden deja de ocupar su horario en cuanto sale de producción (Por Retirar o más adelante), o cuando Producción ya
+// terminó todos sus productos aunque todavía no la hayan pasado de paso.
+export const ocupaHorario = (orden) => {
+  if (!ESTADOS_QUE_OCUPAN.includes(orden?.status)) return false;
+  if (orden.status !== 'PRODUCCION') return true;
+  const productos = productosReales(orden);
+  return !productos.length || productos.some(p => p.estado_prod !== 'FINALIZADO');
+};
 
 // { 'HH:MM': [órdenes] } de las entregas pendientes de ese día, sin contar la orden que se está editando.
 export const ocupacionDelDia = (orders, fecha, excluirId, horario = horarioConfigurado()) => {
   const porFranja = {};
   if (!fecha) return porFranja;
   (orders || []).forEach(o => {
-    if (!ESTADOS_QUE_OCUPAN.includes(o.status)) return;
+    if (!ocupaHorario(o)) return;
     if (excluirId && String(o.id) === String(excluirId)) return;
     const f = o.fechaEntrega || o.fecha_entrega;
     if (!f || String(f).split('T')[0] !== fecha) return;

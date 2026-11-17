@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
+import { monedaActual, useModulo } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { BarChart3, TrendingUp, Calendar, Filter, Download, FileSpreadsheet, Users, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '../supabaseClient';
@@ -13,6 +13,7 @@ const StatisticsCharts = ({
   user
 }) => {
   const isAdmin = user?.role === 'Administrador';
+  const conComisiones = useModulo('comisiones');
 
   // 🔧 NUEVO: margen de días (para que una venta de fin de mes tenga tiempo de
   // cerrarse) configurable por el Admin, guardado en configuracion_global para
@@ -269,12 +270,14 @@ const StatisticsCharts = ({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Estadísticas</h2>
-          <p className="text-slate-500">Reporte de ventas totales y finalizadas por vendedor.</p>
+          <p className="text-slate-500">{conComisiones ? 'Reporte de ventas totales y finalizadas por vendedor.' : 'Resumen de órdenes del rango seleccionado.'}</p>
         </div>
         <div className="flex gap-2">
+           {conComisiones && (
            <Button variant="outline" className="gap-2" onClick={handleExport}>
              <FileSpreadsheet className="h-4 w-4 text-green-600" /> Exportar CSV
            </Button>
+           )}
            <Button variant="default" className="gap-2" onClick={() => window.print()}>
              <Download className="h-4 w-4" /> Imprimir / PDF
            </Button>
@@ -313,7 +316,7 @@ const StatisticsCharts = ({
          </div>
          {/* 🔧 NUEVO: margen de días editable — solo el Admin puede cambiarlo,
              y queda guardado para todos (no es solo de este navegador). */}
-         {isAdmin && (
+         {isAdmin && conComisiones && (
             <div className="w-full md:w-48">
                <label className="text-xs font-semibold text-slate-500 mb-1 block">Margen "Finalizadas" (días)</label>
                <div className="flex items-center gap-1">
@@ -340,7 +343,7 @@ const StatisticsCharts = ({
          <KpiCard title="Archivadas" value={metrics.archived} icon={Filter} color="slate" subtitle="Total en rango" />
       </div>
 
-      {/* Commissions Table */}
+      {conComisiones && (
       <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100">
             <h3 className="font-bold text-slate-700 flex items-center gap-2">
@@ -450,6 +453,7 @@ const StatisticsCharts = ({
            </table>
         </div>
       </div>
+      )}
     </div>;
 };
 const KpiCard = ({

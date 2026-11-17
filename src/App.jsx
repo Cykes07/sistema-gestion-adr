@@ -30,7 +30,7 @@ import ProformaForm from '@/components/ProformaForm';
 import ProformaDetailsModal from '@/components/ProformaDetailsModal';
 import ResumenFacturacion from '@/components/ResumenFacturacion';
 import ReporteRetenciones from '@/components/ReporteRetenciones';
-import { enRango, ordenValida, rangoDelMes, retencionDe } from '@/utils/conciliacion';
+import { conFactura, enRango, nroFacturaDe, ordenValida, rangoDelMes, retencionDe } from '@/utils/conciliacion';
 import InvoicesPanel from '@/components/InvoicesPanel';
 import InvoiceForm from '@/components/InvoiceForm';
 import InvoiceDetailsModal from '@/components/InvoiceDetailsModal';
@@ -45,7 +45,7 @@ import AbonosModal from '@/components/AbonosModal';
 import GeneralLedgerPanel from './components/GeneralLedgerPanel';
 import NotificationsPanel from './components/NotificationsPanel'; // 🔥 NUEVO PANEL DE NOTIFICACIONES
 import ConfiguracionEmpresa from './components/ConfiguracionEmpresa';
-import { cargarEmpresa, useEmpresa } from '@/utils/empresa';
+import { cargarEmpresa, useEmpresa, moduloActivo, vistaDisponible } from '@/utils/empresa';
 
 // 🔧 CAMBIO 10 (Fase 1+2): sin 'CONTABILIDAD'. 'VERIFICACIÓN' se inserta
 // dinámicamente antes de 'FINALIZADA' SOLO si la orden tuvo algún pago
@@ -255,7 +255,7 @@ function App() {
       // de "mis órdenes" funcione por ID en vez de por nombre (ver src/utils/userMatch.js)
       // 🔧 FIX: 'pagos_verificados' (checks del Admin en "Pagos por Verificar") no estaba en esta lista, así que
       // se perdían al recargar y cada 5 s con el refresco; además Ventas no podía ver qué pagos ya se verificaron.
-      const colOrdenes = 'id, order_number, cliente_id, cliente_nombre, tipo_trabajo, tipoOrden, fecha_entrega, vendedor, vendedor_ids, notas, prioridad, origenProformaInfo, productos, financials, anticipo, retencion, forma_pago_anticipo, nota_anticipo, credito_vence_anticipo, esDistribuidor, status, created_at, updated_at, recibido_por_anticipo, recibido_por_anticipo_id, recibido_por_saldo, recibido_por_saldo_id, abonos, motivoAnulacion, ruc, cliente_telefono, pagos_verificados';
+      const colOrdenes = 'id, order_number, cliente_id, cliente_nombre, tipo_trabajo, tipoOrden, fecha_entrega, vendedor, vendedor_ids, notas, prioridad, origenProformaInfo, productos, financials, anticipo, retencion, forma_pago_anticipo, nota_anticipo, credito_vence_anticipo, esDistribuidor, status, created_at, updated_at, recibido_por_anticipo, recibido_por_anticipo_id, recibido_por_saldo, recibido_por_saldo_id, abonos, motivoAnulacion, ruc, cliente_telefono, pagos_verificados, enviada_produccion_at';
 
       // 🔧 FIX (mismo bug): `ordenes` también se paginaba de más — con 1000+
       // órdenes, las más viejas (o según cómo cayera el corte) desaparecían solas.
@@ -361,6 +361,7 @@ function App() {
     const hashView = window.location.hash.match(/^#view=(.+)$/);
     if (hashView) {
         setCurrentView(hashView[1]);
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
     try {
       if(localStorage.getItem('archivedNotifications')) setArchivedNotifications(JSON.parse(localStorage.getItem('archivedNotifications')));
@@ -374,6 +375,7 @@ function App() {
 
   // 🔧 NUEVO: guarda la pantalla actual para que sobreviva a un F5
   useEffect(() => { sessionStorage.setItem('currentView', currentView); }, [currentView]);
+  useEffect(() => { if (!vistaDisponible(currentView, empresa)) setCurrentView('inicio'); }, [currentView, empresa]);
 
   // 🔧 NUEVO: resuelve #orden=ID / #proforma=ID una vez que 'orders'/'proformas' ya
   // cargaron (al abrir la app con esos datos aún no están disponibles en el primer render).
@@ -629,6 +631,11 @@ function App() {
             toast({ title: "Saldo pendiente", description: "Esta orden aún tiene saldo por cobrar. Registra el cobro antes de finalizarla.", variant: "destructive" });
             return;
         }
+        const cierraLaOrden = currentStatus === 'VENTAS POR RETIRAR' || (currentStatus === 'VENTAS' && esVentaCorta(order));
+        if (cierraLaOrden && conFactura(order) && !String(nroFacturaDe(order)).trim()) {
+            toast({ title: "Falta el Nº de factura", description: "La orden tiene IVA: ingresa el número de factura antes de continuar.", variant: "destructive" });
+            return;
+        }
         if (currentStatus === 'VERIFICACIÓN') {
             if (user.role !== 'Administrador') {
                 toast({ title: "Acceso Denegado", description: "Solo un Administrador puede aprobar la Verificación de Pago.", variant: "destructive" });
@@ -641,7 +648,8 @@ function App() {
         }
         try {
             const cambios = { status: nextStatus };
-            if (currentStatus === 'VENTAS' && esVentaCorta(order)) {
+            if (nextStatus === 'PRODUCCION') cambios.enviada_produccion_at = new Date().toISOString();
+            if (currentStatus === 'VENTAS' && esVentaCorta(order) && moduloActivo('inventario', empresa)) {
                 const { productos, descontados, negativos } = await descontarVentaCorta(order, user.name);
                 if (descontados > 0) cambios.productos = productos;
                 if (negativos.length) toast({ title: "Inventario en negativo", description: `Se vendió más de lo que figura en stock: ${negativos.join(', ')}. Revisa el inventario.`, variant: "warning" });
@@ -832,7 +840,7 @@ function App() {
 
             {/* 🔧 FIX: la tarjeta de Ventas Finalizadas (tema de comisiones) tampoco
                 debe verse en el portal de Producción. */}
-            {user.role !== 'Producción' && (
+            {user.role !== 'Producción' && moduloActivo('comisiones', empresa) && (
                 <ProgresoVentasMes orders={orders} user={usuarioVista} vistaDe={vendedorSel ? vendedorSel.name : undefined} />
             )}
 

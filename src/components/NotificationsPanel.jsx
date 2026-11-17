@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
+import { monedaActual, useModulo } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { Bell, UserPlus, Info, Receipt, FileText, ExternalLink, X, CheckCircle2, ArrowRight, Loader2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ShieldCheck, DollarSign, Landmark, Calendar, ShoppingCart, Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '../supabaseClient';
@@ -67,8 +67,8 @@ const ordenTienePagoPorVerificar = (order) => {
     return pagosNoEfectivoRegistrados(order).some(p => !verificados[p.key]);
 };
 
-// 🔧 FINALIZAR SOLO: una orden en VERIFICACIÓN con TODOS sus pagos no-efectivo ya verificados (y sin saldo por cobrar)
-// no tiene nada pendiente para el Admin: se finaliza sola, sin esperar el clic en "Aprobar y Finalizar".
+// Una orden en VERIFICACIÓN solo se finaliza con el clic del Admin en "Aprobar y Finalizar" (pedido del cliente, 14-nov):
+// marcar el último check NO la finaliza, así puede corregir un clic equivocado antes de aprobar.
 const saldoPendienteDe = (order) => {
     let fin = order?.financials || {};
     if (typeof fin === 'string') { try { fin = JSON.parse(fin); } catch (e) { fin = {}; } }
@@ -76,15 +76,6 @@ const saldoPendienteDe = (order) => {
     const totalAbonos = abonos.reduce((acc, a) => acc + (Number(a.monto) || 0), 0);
     const retencion = Number(order?.retencion || fin.retencion || 0);
     return (Number(fin.total) || 0) - (Number(order?.anticipo) || 0) - retencion - totalAbonos;
-};
-// Devuelve null si la orden puede finalizarse sola; si no, el motivo (texto para mostrar).
-const motivoNoAutoFinaliza = (order) => {
-    if (!order || order.status !== 'VERIFICACIÓN') return 'no está en Verificación';
-    const verificados = order.pagos_verificados || {};
-    const faltan = construirPagosAVerificar(order).filter(p => !verificados[p.key]).length;
-    if (faltan > 0) return `faltan ${faltan} pago(s) por verificar`;
-    if (saldoPendienteDe(order) > 0.01) return 'todavía tiene saldo por cobrar';
-    return null;
 };
 
 // 🔧 CAMBIO 9: el aviso de "jornadas sin auditar" y toda la maquinaria de
@@ -225,6 +216,10 @@ const NotificationsPanel = ({
   const [fechaMaestra, setFechaMaestra] = useState(hoyStr);
   const [dailyClosings, setDailyClosings] = useState([]);
   const [accountingReports, setAccountingReports] = useState([]);
+  // Estado (CERRADO / ARCHIVADA) de TODAS las jornadas desde la fecha de inicio de auditoría. Liviano: sin la foto.
+  // Antes el aviso miraba solo los últimos 60 cierres, y los días más viejos (ej. 1-sept) salían como "sin auditar".
+  const [estadosJornada, setEstadosJornada] = useState({});
+  const [estadosCargados, setEstadosCargados] = useState(false);
   const [todosLosVales, setTodosLosVales] = useState([]);
   const [loadingResumen, setLoadingResumen] = useState(true);
   // 🔧 NUEVO: compras recientes registradas en Inventario (Admin ve un
@@ -238,7 +233,7 @@ const NotificationsPanel = ({
   const [fichaInventario, setFichaInventario] = useState({}); // { material_id: { unidad, tieneCosto } } (para la tarjeta de recepción)
   const [marcandoRevisado, setMarcandoRevisado] = useState(null); // id del grupo que se está guardando
   const [cerrandoDia, setCerrandoDia] = useState(false);
-  const [comprobanteGeneral, setComprobanteGeneral] = useState(null);
+  const [subiendoComprobante, setSubiendoComprobante] = useState(false);
   // 🔧 CAMBIO 9: verificación MANUAL del depósito bancario del día. Admin revisa
   // la cuenta por fuera y marca este check; se guarda al instante (no espera al
   // botón de archivar). Se bloquea una vez que el día queda archivado/cerrado.
@@ -250,7 +245,13 @@ const NotificationsPanel = ({
   const [auditoriaExpandida, setAuditoriaExpandida] = useState(null);
   // 🔧 NUEVO: pestaña activa del panel derecho ('trabajo' | 'inventario') — antes
   // eran dos tarjetas apiladas y la de abajo se perdía.
-  const [bandejaTab, setBandejaTab] = useState('trabajo');
+  const conInventario = useModulo('inventario');
+  const [bandejaTab, setBandejaTab] = useState(() => {
+      const guardada = sessionStorage.getItem('bandejaNotificaciones');
+      return isAdmin && (guardada === 'inventario' || guardada === 'verificacion') ? guardada : 'trabajo';
+  });
+  useEffect(() => { sessionStorage.setItem('bandejaNotificaciones', bandejaTab); }, [bandejaTab]);
+  const tabActiva = bandejaTab === 'inventario' && !conInventario ? 'trabajo' : bandejaTab;
   // 🔧 CAMBIO 10 (Fase 2): checks de "PAGO POR VERIFICAR" que ya se guardaron en
   // esta sesión, para reflejarlos al instante sin esperar a que 'orders' (prop)
   // se vuelva a cargar. Igual para las órdenes que ya se finalizaron desde acá.
@@ -258,8 +259,7 @@ const NotificationsPanel = ({
   const [guardandoPago, setGuardandoPago] = useState(null); // `${orderId}:${key}` que se está guardando
   const [finalizandoOrden, setFinalizandoOrden] = useState(null); // id de la orden que se está finalizando
   const [ordenesFinalizadasLocal, setOrdenesFinalizadasLocal] = useState([]); // ids ya finalizados desde aquí
-  const [finalizadasAuto, setFinalizadasAuto] = useState([]); // nº de las órdenes que se finalizaron solas en esta sesión
-  const autoFinalizadasPedidas = React.useRef(new Set()); // ids ya enviados a finalizar solos (no repetir)
+  const [ocultadasLocal, setOcultadasLocal] = useState([]); // ids que el Admin quitó de la lista con la ✕ (ya verificadas, en pasos anteriores)
   const [ordenesTocadas, setOrdenesTocadas] = useState([]); // ids con algún check marcado/desmarcado en esta sesión (siguen visibles aunque queden todos verificados)
   const [comprobantesVerif, setComprobantesVerif] = useState({}); // { [orderId]: comprobantes | null | 'error' }
   const [comprobantePreview, setComprobantePreview] = useState(null); // url de la foto abierta en grande
@@ -280,6 +280,7 @@ const NotificationsPanel = ({
   // de caja de vendedor) pero nunca se marcaron como "CERRADO" en cierres_contables
   // — para avisar que hay que auditarlas en orden, antes de seguir avanzando.
   const jornadasSinAuditar = useMemo(() => {
+      if (!estadosCargados) return [];
       const diasConActividad = new Set(dailyClosings.map(c => c.date ? String(c.date).split('T')[0].trim() : null).filter(Boolean));
       return Array.from(diasConActividad)
           .filter(fecha => fecha < hoyStr) // solo días pasados, no hoy
@@ -289,13 +290,14 @@ const NotificationsPanel = ({
               // (flujo viejo de Contabilidad) como 'ARCHIVADA' (flujo nuevo). Antes
               // solo miraba 'CERRADO', así que un día recién archivado seguía
               // apareciendo en el aviso "jornadas sin auditar".
-              const reporte = accountingReports.find(r => r.fecha === fecha);
-              return !reporte || (reporte.estado !== 'CERRADO' && reporte.estado !== 'ARCHIVADA');
+              const estado = estadosJornada[fecha];
+              return estado !== 'CERRADO' && estado !== 'ARCHIVADA';
           })
           .sort((a, b) => new Date(a) - new Date(b)); // más antigua primero
-  }, [dailyClosings, accountingReports, hoyStr]);
+  }, [dailyClosings, estadosJornada, estadosCargados, hoyStr]);
 
   const reporteDelDiaActual = accountingReports.find(r => r.fecha === fechaMaestra);
+  const comprobanteDelDia = reporteDelDiaActual?.comprobante_general || null;
   // "ARCHIVADA" = jornada archivada desde aquí con TODOS los checks. "CERRADO" =
   // estado viejo que ponía el panel de Contabilidad (ya en retiro).
   // 🔧 AJUSTE: el Admin SIEMPRE puede editar los checks y (re)archivar, aunque el
@@ -303,6 +305,15 @@ const NotificationsPanel = ({
   // que bloqueaba todos los botones; se eliminó. Solo queda `diaEstaArchivado`
   // para saber si mostrar "Archivar" o "Reabrir".
   const diaEstaArchivado = reporteDelDiaActual?.estado === 'ARCHIVADA';
+
+  useEffect(() => {
+      if (!isAdmin || loadingResumen || !fechaMaestra || accountingReports.some(r => r.fecha === fechaMaestra)) return;
+      let vigente = true;
+      supabase.from('cierres_contables').select('*').eq('fecha', fechaMaestra).maybeSingle().then(({ data }) => {
+          if (vigente && data) setAccountingReports(prev => (prev.some(r => r.fecha === data.fecha) ? prev : [...prev, data]));
+      });
+      return () => { vigente = false; };
+  }, [isAdmin, loadingResumen, fechaMaestra]);
 
   // 🔧 CAMBIO 9: al cambiar de día, sincroniza el check de depósito con lo guardado.
   useEffect(() => {
@@ -314,23 +325,41 @@ const NotificationsPanel = ({
   // `select('*')` — y esas filas traen `comprobante_general` (la foto de la
   // papeleta en base64) y `detalles_vendedores`, o sea varios MB. En vez de eso,
   // actualizamos en memoria SOLO la fila del día que acabamos de escribir.
-  const aplicarCambioReporteLocal = (patch) => {
+  const aplicarCambioReporteLocal = (patch, fecha = fechaMaestra) => {
+      if ('estado' in patch) setEstadosJornada(prev => ({ ...prev, [fecha]: patch.estado }));
       setAccountingReports(prev => {
-          const idx = prev.findIndex(r => r.fecha === fechaMaestra);
-          if (idx === -1) return [{ fecha: fechaMaestra, ...patch }, ...prev];
+          const idx = prev.findIndex(r => r.fecha === fecha);
+          if (idx === -1) return [{ fecha, ...patch }, ...prev];
           const copia = [...prev];
           copia[idx] = { ...copia[idx], ...patch };
           return copia;
       });
   };
 
-  // Sube el comprobante general (igual que en AccountingPanel.jsx)
+  // Sube la papeleta de depósito del día y la guarda de inmediato en ESE día (antes quedaba solo en memoria hasta
+  // archivar, y se veía la misma foto al pasar a otros días).
   const handleUploadComprobante = (e) => {
       const file = e.target.files[0];
+      e.target.value = '';
       if (!file) return;
-      if (file.size > 5 * 1024 * 1024) return;
+      if (file.size > 5 * 1024 * 1024) { alert('La imagen pesa más de 5 MB. Use una foto más liviana.'); return; }
+      const fecha = fechaMaestra;
       const reader = new FileReader();
-      reader.onloadend = () => setComprobanteGeneral(reader.result);
+      reader.onloadend = async () => {
+          setSubiendoComprobante(true);
+          try {
+              const { error } = await supabase.from('cierres_contables').upsert(
+                  { fecha, comprobante_general: reader.result, updated_at: new Date().toISOString() },
+                  { onConflict: 'fecha' }
+              );
+              if (error) throw error;
+              aplicarCambioReporteLocal({ comprobante_general: reader.result }, fecha);
+          } catch (error) {
+              alert('No se pudo guardar el comprobante: ' + error.message);
+          } finally {
+              setSubiendoComprobante(false);
+          }
+      };
       reader.readAsDataURL(file);
   };
 
@@ -383,7 +412,7 @@ const NotificationsPanel = ({
       // 🔧 CAMBIO 10 (traído adelante): ya NO se exige "cajas de vendedores
       // verificadas una por una" — eso lo hacía Contabilidad (rol eliminado).
       // Queda: comprobante/papeleta (si hubo efectivo) + check de depósito + vales.
-      const comprobanteYaGuardado = comprobanteGeneral || reporteDelDiaActual?.comprobante_general;
+      const comprobanteYaGuardado = comprobanteDelDia;
       if (!comprobanteYaGuardado && resumen.totals.cash > 0) {
           return alert('Debes subir el comprobante de depósito general de efectivo antes de finalizar.');
       }
@@ -406,7 +435,7 @@ const NotificationsPanel = ({
               total_efectivo_esperado: resumen.totals.cash,
               total_transferencias_esperado: resumen.totals.transfers,
               detalles_vendedores: reporteDelDiaActual?.detalles_vendedores || [],
-              comprobante_general: comprobanteGeneral || reporteDelDiaActual?.comprobante_general || null,
+              comprobante_general: comprobanteDelDia,
               deposito_verificado: true,
               estado: 'ARCHIVADA',
               updated_at: new Date().toISOString()
@@ -465,6 +494,12 @@ const NotificationsPanel = ({
 
         const { data: accData } = await supabase.from('cierres_contables').select('*').order('fecha', { ascending: false }).limit(60);
         setAccountingReports(accData || []);
+
+        const { data: estadosData, error: errEstados } = await supabase.from('cierres_contables').select('fecha, estado').gte('fecha', FECHA_INICIO_AUDITORIA).order('fecha', { ascending: true }).limit(2000);
+        if (!errEstados) {
+            setEstadosJornada(Object.fromEntries((estadosData || []).map(r => [r.fecha, r.estado])));
+            setEstadosCargados(true);
+        }
 
         const { data: valesData } = await supabase.from('vales_caja').select('*').order('fecha', { ascending: false }).limit(300);
         setTodosLosVales(valesData || []);
@@ -728,11 +763,11 @@ const NotificationsPanel = ({
   // Más reciente primero.
   const ordenesEnVerificacion = useMemo(() => {
       return (orders || [])
-          .filter(o => !ordenesFinalizadasLocal.includes(o.id))
+          .filter(o => !ordenesFinalizadasLocal.includes(o.id) && !ocultadasLocal.includes(o.id))
           .map(o => ({ ...o, pagos_verificados: pagosVerifOverride[o.id] ?? o.pagos_verificados ?? {} }))
           .filter(o => o.status === 'VERIFICACIÓN' || ordenTienePagoPorVerificar(o) || (ordenesTocadas.includes(o.id) && !ESTADOS_SIN_VERIFICAR.includes(o.status) && construirPagosAVerificar(o).length > 0))
           .sort((a, b) => new Date(b.updated_at || b.updatedAt || b.created_at || 0) - new Date(a.updated_at || a.updatedAt || a.created_at || 0));
-  }, [orders, pagosVerifOverride, ordenesFinalizadasLocal, ordenesTocadas]);
+  }, [orders, pagosVerifOverride, ordenesFinalizadasLocal, ordenesTocadas, ocultadasLocal]);
 
   // Trae las fotos de comprobante SOLO de las órdenes de esta bandeja (son pocas), una vez por orden.
   // 'orders' no trae la columna comprobantes (es pesada), por eso se pide aparte.
@@ -773,8 +808,6 @@ const NotificationsPanel = ({
       try {
           const { error } = await supabase.from('ordenes').update({ pagos_verificados: actualizado }).eq('id', order.id);
           if (error) throw error;
-          const ordenActualizada = { ...order, pagos_verificados: actualizado };
-          if (motivoNoAutoFinaliza(ordenActualizada) === null) finalizarOrdenVerificada(ordenActualizada, true);
       } catch (error) {
           setPagosVerifOverride(prev => ({ ...prev, [order.id]: actuales })); // revertir si falló
           alert('No se pudo guardar la verificación del pago: ' + error.message);
@@ -783,45 +816,30 @@ const NotificationsPanel = ({
       }
   };
 
-  // Aprueba y finaliza una orden en VERIFICACIÓN — solo si ya están todos los checks.
-  // automatico = true: la llama el sistema (todo verificado), sin avisos emergentes; deja constancia arriba de la lista.
-  const finalizarOrdenVerificada = async (order, automatico = false) => {
-      if (automatico) {
-          if (motivoNoAutoFinaliza(order) !== null || autoFinalizadasPedidas.current.has(order.id)) return;
-          autoFinalizadasPedidas.current.add(order.id);
-      } else {
-          const pagos = construirPagosAVerificar(order);
-          const faltan = pagos.filter(p => !(order.pagos_verificados || {})[p.key]);
-          if (faltan.length > 0) {
-              alert(`Faltan ${faltan.length} pago(s) por verificar en esta orden.`);
-              return;
-          }
-          setFinalizandoOrden(order.id);
+  // Aprueba y finaliza una orden en VERIFICACIÓN — solo con el clic del Admin y con todos los checks marcados.
+  const finalizarOrdenVerificada = async (order) => {
+      const pagos = construirPagosAVerificar(order);
+      const faltan = pagos.filter(p => !(order.pagos_verificados || {})[p.key]);
+      if (faltan.length > 0) {
+          alert(`Faltan ${faltan.length} pago(s) por verificar en esta orden.`);
+          return;
       }
+      if (saldoPendienteDe(order) > 0.01) {
+          alert('Esta orden todavía tiene saldo por cobrar.');
+          return;
+      }
+      setFinalizandoOrden(order.id);
       try {
           // .eq('status', 'VERIFICACIÓN'): si otra persona ya la movió, no se pisa nada
           const { error } = await supabase.from('ordenes').update({ status: 'FINALIZADA' }).eq('id', order.id).eq('status', 'VERIFICACIÓN');
           if (error) throw error;
           setOrdenesFinalizadasLocal(prev => [...prev, order.id]);
-          if (automatico) setFinalizadasAuto(prev => [...prev, String(order.orderNumber || order.order_number || order.id).padStart(7, '0')]);
       } catch (error) {
-          if (automatico) { autoFinalizadasPedidas.current.delete(order.id); console.error('No se pudo finalizar sola la orden', order.id, error); }
-          else alert('No se pudo finalizar la orden: ' + error.message);
+          alert('No se pudo finalizar la orden: ' + error.message);
       } finally {
-          if (!automatico) setFinalizandoOrden(null);
+          setFinalizandoOrden(null);
       }
   };
-
-  // 🔧 Órdenes que YA estaban en VERIFICACIÓN con todo verificado (de antes de este cambio, o verificadas desde otra
-  // computadora): al abrir el Centro de Notificaciones se finalizan solas, una vez cada una. Se mira lo GUARDADO en
-  // el servidor (no el check que se está guardando en este momento).
-  useEffect(() => {
-      if (!isAdmin) return;
-      const listas = (orders || []).filter(o => o.status === 'VERIFICACIÓN' && !ordenesFinalizadasLocal.includes(o.id)
-          && !autoFinalizadasPedidas.current.has(o.id) && motivoNoAutoFinaliza(o) === null);
-      if (listas.length === 0) return;
-      (async () => { for (const o of listas) await finalizarOrdenVerificada(o, true); })();
-  }, [isAdmin, orders]);
 
   // 🔧 CAMBIO 9: ¿están TODOS los checks del día? Recién ahí se habilita el botón
   // "Archivar Jornada" de arriba. Mientras falte algo, la jornada sale como
@@ -833,7 +851,7 @@ const NotificationsPanel = ({
       const resumen = getResumenContableDelDia(fechaMaestra);
       const faltantes = [];
       // 🔧 CAMBIO 10 (traído adelante): sin requisito de "cajas por vendedor".
-      const comprobanteOk = comprobanteGeneral || reporteDelDiaActual?.comprobante_general;
+      const comprobanteOk = comprobanteDelDia;
       if (resumen.totals.cash > 0 && !comprobanteOk) faltantes.push('Falta subir el comprobante de depósito del efectivo.');
       if (!depositoVerificado) faltantes.push('Falta marcar el check "Depósito Bancario Verificado".');
       const valesDelDia = valesPorDia[fechaMaestra] || [];
@@ -938,7 +956,7 @@ const NotificationsPanel = ({
                                 <div className="p-8 text-center text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></div>
                             ) : (() => {
                                 const resumen = getResumenContableDelDia(fechaMaestra);
-                                const comprobanteActual = comprobanteGeneral || reporteDelDiaActual?.comprobante_general;
+                                const comprobanteActual = comprobanteDelDia;
                                 return (
                                     <div className="text-xs space-y-3">
                                         <div className="grid grid-cols-2 gap-2">
@@ -961,9 +979,14 @@ const NotificationsPanel = ({
                                             {comprobanteActual ? (
                                                 <>
                                                     {/* 🔧 Antes era solo una miniatura sin clic: no se podía ver la papeleta de días anteriores. */}
-                                                    <button type="button" onClick={() => setFotoCierre(comprobanteActual)} title="Ver comprobante en grande" className="rounded border border-slate-300 overflow-hidden hover:ring-2 hover:ring-indigo-400 transition">
-                                                        <img src={comprobanteActual} className="h-8 w-8 object-cover" alt="comprobante"/>
-                                                    </button>
+                                                    <span className="flex items-center gap-2">
+                                                        <label className="text-[10px] text-slate-500 font-bold cursor-pointer hover:underline" title="Reemplazar la foto de este día">
+                                                            {subiendoComprobante ? <Loader2 className="h-3 w-3 animate-spin"/> : 'Cambiar'} <input type="file" accept="image/*" className="hidden" disabled={subiendoComprobante} onChange={handleUploadComprobante}/>
+                                                        </label>
+                                                        <button type="button" onClick={() => setFotoCierre(comprobanteActual)} title="Ver comprobante en grande" className="rounded border border-slate-300 overflow-hidden hover:ring-2 hover:ring-indigo-400 transition">
+                                                            <img src={comprobanteActual} className="h-8 w-8 object-cover" alt="comprobante"/>
+                                                        </button>
+                                                    </span>
                                                     {fotoCierre && createPortal(
                                                         <div className="fixed inset-0 z-[200] bg-black/85 flex items-center justify-center p-4" onClick={() => setFotoCierre(null)}>
                                                             <button type="button" className="absolute top-4 right-4 text-white p-2 bg-white/10 hover:bg-white/20 rounded-full" onClick={() => setFotoCierre(null)} title="Cerrar"><X className="h-7 w-7" /></button>
@@ -974,7 +997,7 @@ const NotificationsPanel = ({
                                                 </>
                                             ) : (
                                                 <label className="text-[10px] text-indigo-600 font-bold cursor-pointer hover:underline">
-                                                    Subir <input type="file" accept="image/*" className="hidden" onChange={handleUploadComprobante}/>
+                                                    {subiendoComprobante ? <Loader2 className="h-3 w-3 animate-spin inline"/> : 'Subir'} <input type="file" accept="image/*" className="hidden" disabled={subiendoComprobante} onChange={handleUploadComprobante}/>
                                                 </label>
                                             )}
                                         </div>
@@ -1131,13 +1154,13 @@ const NotificationsPanel = ({
                             onClick={() => setBandejaTab('trabajo')}
                             className={cn(
                                 "px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap",
-                                bandejaTab === 'trabajo' ? "border-indigo-500 text-indigo-600 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"
+                                tabActiva === 'trabajo' ? "border-indigo-500 text-indigo-600 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"
                             )}
                         >
                             <FileText className="h-4 w-4"/> Bandeja de Trabajo ({user?.role})
                             <span className="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded-full">{workItems.length}</span>
                         </button>
-                        {isAdmin && (
+                        {isAdmin && conInventario && (
                             <button
                                 onClick={() => setBandejaTab('inventario')}
                                 className={cn(
@@ -1165,15 +1188,9 @@ const NotificationsPanel = ({
                         )}
                     </div>
 
-                    {isAdmin && bandejaTab === 'verificacion' ? (
+                    {isAdmin && tabActiva === 'verificacion' ? (
                         <>
                         <div className="divide-y divide-slate-100 max-h-[75vh] overflow-y-auto">
-                            {finalizadasAuto.length > 0 && (
-                                <div className="p-3 bg-green-50 border-b border-green-200 text-xs text-green-800 flex items-start gap-2">
-                                    <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
-                                    <span><strong>Finalizadas automáticamente</strong> (todos sus pagos ya estaban verificados): {finalizadasAuto.map(n => `#${n}`).join(', ')}</span>
-                                </div>
-                            )}
                             {ordenesEnVerificacion.length === 0 ? (
                                 <div className="p-12 text-center text-slate-400">
                                     <CheckCircle2 className="h-10 w-10 text-green-400 mx-auto mb-2" />
@@ -1200,9 +1217,16 @@ const NotificationsPanel = ({
                                                     </span>
                                                 </div>
                                             </div>
-                                            <Button size="sm" variant="outline" className="text-xs h-8 border-fuchsia-300 text-fuchsia-700 hover:bg-fuchsia-100 shrink-0" onClick={() => onViewOrder(order)}>
-                                                Ver Orden <ExternalLink className="h-3 w-3 ml-1"/>
-                                            </Button>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <Button size="sm" variant="outline" className="text-xs h-8 border-fuchsia-300 text-fuchsia-700 hover:bg-fuchsia-100" onClick={() => onViewOrder(order)}>
+                                                    Ver Orden <ExternalLink className="h-3 w-3 ml-1"/>
+                                                </Button>
+                                                {todoListo && order.status !== 'VERIFICACIÓN' && (
+                                                    <Button size="sm" variant="outline" title="Ya está todo verificado: quitar de la lista" className="text-xs h-8 px-2 border-slate-300 text-slate-500 hover:bg-red-50 hover:text-red-600 hover:border-red-300" onClick={() => setOcultadasLocal(prev => [...prev, order.id])}>
+                                                        <X className="h-4 w-4"/>
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="bg-white border border-fuchsia-200 rounded-lg overflow-hidden">
                                             {pagos.map(pago => {
@@ -1245,7 +1269,7 @@ const NotificationsPanel = ({
                                         </div>
                                         {order.status !== 'VERIFICACIÓN' ? (
                                             <p className="text-[10px] text-slate-500 mt-2 text-right">
-                                                La orden sigue en <strong>{order.status}</strong>: revisa y marca los pagos ya. {order.status !== 'FINALIZADA' && 'Cuando Ventas la cierre: si todo ya está verificado se finaliza sola; si el saldo es no efectivo, aparecerá aquí para verificarlo.'}
+                                                La orden sigue en <strong>{order.status}</strong>: revisa y marca los pagos ya. {todoListo ? 'Ya está todo verificado: quítala de la lista con la ✕.' : 'Cuando Ventas la cierre, si el saldo es no efectivo aparecerá aquí para verificarlo.'}
                                             </p>
                                         ) : (
                                         <div className="flex justify-end mt-2">
@@ -1273,7 +1297,7 @@ const NotificationsPanel = ({
                             document.body
                         )}
                         </>
-                    ) : isAdmin && bandejaTab === 'inventario' ? (
+                    ) : isAdmin && tabActiva === 'inventario' ? (
                         <div className="divide-y divide-slate-100 max-h-[75vh] overflow-y-auto">
                             {tareasInventario.length === 0 ? (
                                 <div className="p-12 text-center text-slate-400">

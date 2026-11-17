@@ -4,25 +4,9 @@ import { supabase } from '../supabaseClient';
 import { Calendar as CalendarIcon, Printer, Loader2, BookOpen, DollarSign, Building, TrendingDown, Filter, Users, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { momentoDelDia, momentoDelAbono, horaCorta, ordenarPorMomento, claseMetodo, claseNota } from '@/utils/movimientosDia';
 
 const FILTROS = ['TODOS', 'EFECTIVO', 'BANCOS / TRANSFERENCIAS', 'SOLO INGRESOS', 'SOLO EGRESOS'];
-
-// 🔧 (26-oct) Hora de cada movimiento, para ordenar el día cronológicamente (antes iba por monto) y mostrarla.
-const diaLocalDe = (v) => {
-  const d = new Date(v);
-  if (isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-// Un momento solo sirve como hora del movimiento si cae el mismo día que se está mirando.
-const momentoDelDia = (v, dia) => (v && diaLocalDe(v) === dia ? new Date(v).toISOString() : null);
-// Abonos: la fecha la elige el vendedor (se guarda con hora fija 12:00), pero el `id` es Date.now() del momento en que se
-// registró en AbonosModal: esa es la hora real, si el abono se registró el mismo día de su fecha.
-const momentoDelAbono = (abono) => {
-  const id = Number(abono?.id);
-  if (!Number.isFinite(id) || id < 1577836800000 || id > Date.now() + 86400000) return null; // no es una marca de tiempo
-  return momentoDelDia(id, diaLocalDe(abono.fecha));
-};
-const horaCorta = (iso) => (iso ? new Date(iso).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
 
 const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
   const empresa = empresaActual(); // 🔧 logo y datos de la empresa para la impresión
@@ -248,9 +232,7 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
       });
     });
 
-    return txs
-      .map((tx, i) => ({ ...tx, _i: i }))
-      .sort((a, b) => (a.momento && b.momento ? a.momento.localeCompare(b.momento) : a.momento ? -1 : b.momento ? 1 : 0) || a._i - b._i);
+    return ordenarPorMomento(txs);
   }, [orders, selectedDate, valesDelDia]);
 
   // 3. CÁLCULO MÁGICO DE CAJAS POR VENDEDOR (Inicio, Cierre, Entregado, Saldo Mañana)
@@ -556,14 +538,14 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
                                   <td className="px-4 py-3 text-center font-mono text-slate-600 font-medium">{tx.orden}</td>
                                   <td className="px-4 py-3 font-medium text-slate-700">{tx.vendedor}</td>
                                   <td className="px-4 py-3 text-center">
-                                      <span className={cn("text-xs px-2 py-1 rounded-md font-medium", tx.metodo.toLowerCase().includes('efectivo') ? "bg-emerald-50 text-emerald-700" : "bg-indigo-50 text-indigo-700")}>
+                                      <span className={cn("text-[11px] px-2 py-0.5 rounded-md font-semibold uppercase", claseMetodo(tx.metodo))}>
                                           {tx.metodo.split('-')[0].trim()}
                                       </span>
                                   </td>
                                   <td className="px-4 py-3 text-right font-bold text-green-600">{tx.ingreso > 0 ? formatCurrency(tx.ingreso) : '-'}</td>
                                   <td className="px-4 py-3 text-right font-bold text-red-600">{tx.egreso > 0 ? formatCurrency(tx.egreso) : '-'}</td>
                                   <td className="px-4 py-3 text-center text-xs">
-                                      <span className={cn(tx.nota?.includes('PDTE') || tx.nota?.includes('CRÉDITO') ? "text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded" : tx.nota?.includes('ANULADO') ? "text-red-600" : "text-green-700")}>
+                                      <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full whitespace-nowrap", claseNota(tx.nota))}>
                                           {tx.nota || '-'}
                                       </span>
                                   </td>

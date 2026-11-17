@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
-import { monedaActual } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
+import { monedaActual, useModulo } from '@/utils/empresa'; // 🔧 moneda de Configuración de la Empresa
 import { precioSegunCatalogo, referenciaCatalogo, redondearAMedio } from '@/utils/preciosProducto';
 import DiferenciaPrecio from './DiferenciaPrecio';
 import TarifasVolumen from './TarifasVolumen';
@@ -466,6 +466,8 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
   const horaPropia = isEditMode && currentDatePart === fechaOriginalDia ? horaOriginal : null;
   const [showDisponibilidad, setShowDisponibilidad] = useState(false);
   const { stockPorId, reservado } = useStockDeProductos(formData.productos, orders, isEditMode ? initialData.id : null);
+  const conInventario = useModulo('inventario');
+  const columnasAntesDelTotal = conInventario ? 5 : 4;
   const fechaDisponibilidad = currentDatePart || fechaLocal();
   const horariosEntrega = horariosDelDia(orders, currentDatePart, isEditMode ? initialData.id : null);
   const horariosPanel = currentDatePart ? horariosEntrega : horariosDelDia(orders, fechaDisponibilidad, isEditMode ? initialData.id : null);
@@ -1066,7 +1068,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
             cliente_id: formData.clienteId, cliente_nombre: formData.cliente, tipo_trabajo: finalTitle, tipoOrden: formData.tipoOrden, fecha_entrega: formData.fechaEntrega || null,
             ruc: selectedClientData?.empresa || null, cliente_telefono: selectedClientData?.telefono || null, // 🔧 NUEVO: snapshot de datos del cliente para el recibo
             vendedor: formData.vendedor, vendedor_ids: formData.vendedor_ids || [], notas: formData.notas, prioridad: 'Normal', origenProformaInfo: formData.origenProformaInfo,
-            productos: processedProducts.map(conMaterialesReservados), abonos: abonos, comprobantes: comprobantesDataFinal,
+            productos: conInventario ? processedProducts.map(conMaterialesReservados) : processedProducts, abonos: abonos, comprobantes: comprobantesDataFinal,
             financials: { 
                 ...financials, saldo: financials.saldoPendiente, descuentoMonto: formData.descuentoMonto, descuentoVal: formData.descuentoMonto, 
                 ivaPercentage: formData.ivaPercentage, retentionPercent: formData.retentionPercent, retencion: formData.retencion,
@@ -1332,7 +1334,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                       <tr>
                          <th className="py-2 px-1 text-center w-8">#</th>
                          <th className="py-2 px-2 text-left">Producto y Detalles</th>
-                         <th className="py-2 px-2 text-center w-44">Stock</th>
+                         {conInventario && <th className="py-2 px-2 text-center w-44">Stock</th>}
                          <th className="py-2 px-2 text-center w-36">Cant.</th>
                          <th className="py-2 px-2 text-right w-32">{formData.productos.some(p => p.es_por_metro && p.descripcion) ? 'Unitario ($ / m²)' : 'Unitario'}</th>
                          <th className="py-2 px-2 text-right w-28">Total</th>
@@ -1477,9 +1479,11 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                                 )}
                              </td>
 
+                             {conInventario && (
                              <td className="py-2 px-2 align-top pt-3">
                                  {cleanDescription && <StockProducto producto={row} stockPorId={stockPorId} reservado={reservado} />}
                              </td>
+                             )}
 
                              <td className="py-2 px-2 relative align-top pt-3">
                                  <input
@@ -1541,12 +1545,12 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                    {/* 🔥 ESTRUCTURA FINANCIERA ACTUALIZADA (NUEVA OPCION DE IVA) 🔥 */}
                    <tfoot className="bg-slate-100 font-medium text-slate-700 border-t border-slate-300 text-xs">
                       <tr>
-                          <td colSpan="5" className="text-right py-1 px-2">SubTotal (Bruto)</td>
+                          <td colSpan={columnasAntesDelTotal} className="text-right py-1 px-2">SubTotal (Bruto)</td>
                           <td className="text-right py-1 px-2">$ {financials.subtotal.toFixed(2)}</td>
                           <td></td>
                       </tr>
                       <tr>
-                         <td colSpan="5" className="text-right py-1 px-2"><div className="flex items-center justify-end gap-2">
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-1 px-2"><div className="flex items-center justify-end gap-2">
                             <span className="text-slate-500 font-bold" title="Este valor se restará directamente del Total Final">Ajuste al Total ($)</span>
                             {isBottomReadOnly ? (
                                 <span className="font-bold text-red-600 ml-2">${Number(localDiscountVal || 0).toFixed(2)} ({Number(localDiscountPercent || 0).toFixed(2)}%)</span>
@@ -1583,13 +1587,13 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
 
                       {/* FILA DE BASE IMPONIBLE */}
                       <tr>
-                         <td colSpan="5" className="text-right py-1 px-2 font-bold text-slate-500">Base Imponible</td>
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-1 px-2 font-bold text-slate-500">Base Imponible</td>
                          <td className="text-right py-1 px-2 font-bold text-slate-800">$ {financials.baseImponible.toFixed(2)}</td>
                          <td></td>
                       </tr>
 
                       <tr>
-                         <td colSpan="5" className="text-right py-1 px-2"><div className="flex items-center justify-end gap-3 whitespace-nowrap">
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-1 px-2"><div className="flex items-center justify-end gap-3 whitespace-nowrap">
                             {/* NUEVO CHECKBOX: PRECIOS INCLUYEN IVA */}
                             {formData.aplicarIva && (
                                 <div className="flex items-center gap-1 border-r border-slate-300 pr-3">
@@ -1614,12 +1618,12 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                       </tr>
                       
                       <tr className="bg-slate-200 font-bold text-slate-900 border-t border-slate-300">
-                         <td colSpan="5" className="text-right py-2 px-2">TOTAL FACTURA</td>
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-2 px-2">TOTAL FACTURA</td>
                          <td className="text-right py-2 px-2">$ {financials.total.toFixed(2)}</td><td></td>
                       </tr>
                       
                       <tr>
-                         <td colSpan="5" className="text-right py-1 px-2"><div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-1 px-2"><div className="flex items-center justify-end gap-2 whitespace-nowrap">
                             <Checkbox 
                                 id="ret-check" 
                                 checked={applyRetention} 
@@ -1693,7 +1697,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                       </tr>
 
                       <tr className="bg-blue-100 font-black text-blue-900 border-t border-slate-300 shadow-inner">
-                         <td colSpan="5" className="text-right py-2 px-2">TOTAL A PAGAR</td>
+                         <td colSpan={columnasAntesDelTotal} className="text-right py-2 px-2">TOTAL A PAGAR</td>
                          <td className="text-right py-2 px-2">$ {(financials.total - formData.retencion).toFixed(2)}</td><td></td>
                       </tr>
                    </tfoot>
@@ -2012,7 +2016,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
                                      <div className="flex justify-between items-start w-full pr-6 mb-2">
                                          <div>
                                              <div className="text-[10px] text-slate-500 font-bold">{abono.fecha ? abono.fecha.split('T')[0] : ''}</div>
-                                             <div className={`text-xs font-bold uppercase ${isDevolucion ? 'text-orange-700' : 'text-red-700'}`}>{abono.metodoPago || a.metodo_pago}</div>
+                                             <div className={`text-xs font-bold uppercase ${isDevolucion ? 'text-orange-700' : 'text-red-700'}`}>{abono.metodoPago || abono.metodo_pago}</div>
                                          </div>
                                          <div className={`font-black text-lg ${isDevolucion ? 'text-orange-600' : 'text-red-600'}`}>
                                              {isDevolucion ? formatCurrency(abono.monto) : `+${formatCurrency(abono.monto)}`}

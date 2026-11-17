@@ -80,6 +80,23 @@ const colorFechaEntrega = (fecha, ahora = new Date()) => {
 };
 
 // 🔥 Calculador Inteligente de Estados Contables Actualizado 🔥
+const dosDig = (n) => String(n).padStart(2, '0');
+const fechaHoraCorta = (iso) => {
+    const d = new Date(iso);
+    if (!iso || isNaN(d.getTime())) return '';
+    return `${dosDig(d.getDate())}/${dosDig(d.getMonth() + 1)}/${d.getFullYear()} - ${dosDig(d.getHours())}:${dosDig(d.getMinutes())}`;
+};
+const tiempoTranscurrido = (iso, ahora = new Date()) => {
+    const min = Math.floor((ahora - new Date(iso)) / 60000);
+    if (!iso || isNaN(min)) return '';
+    if (min < 1) return 'Recién';
+    if (min < 60) return `Hace ${min}m`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `Hace ${h}h`;
+    const dias = Math.floor(h / 24);
+    return `Hace ${dias}d`;
+};
+
 const getOrderAccountingStatus = (o) => {
     const total = Number(o.financials?.total) || 0;
     const anticipo = Number(o.anticipo) || 0;
@@ -222,6 +239,8 @@ const WorkAreaList = ({
       });
   }, [searchFilteredOrders]);
 
+  const mostrarEnvio = user.role === 'Producción' || listFilter === 'produccion';
+
   const totalItems = sortedOrders.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -343,7 +362,7 @@ const WorkAreaList = ({
                         <div className="w-px bg-slate-300 mx-1"></div>
 
                         <button onClick={() => setListFilter('por_finalizar')} className={cn("px-4 py-2 text-xs font-bold rounded-md transition-all flex items-center gap-1 shadow-sm border", listFilter === 'por_finalizar' ? "bg-indigo-600 text-white border-indigo-700" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-100")}>
-                            <FileSignature className="h-4 w-4" /> POR CERRAR <span className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-[10px]">{counts.por_finalizar}</span>
+                            <FileSignature className="h-4 w-4" /> VERIFICACIÓN <span className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-[10px]">{counts.por_finalizar}</span>
                         </button>
                         <button onClick={() => setListFilter('creditos')} className={cn("px-4 py-2 text-xs font-bold rounded-md transition-all flex items-center gap-1 shadow-sm border", listFilter === 'creditos' ? "bg-amber-500 text-white border-amber-600" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-100")}>
                             <Wallet className="h-4 w-4" /> CRÉDITOS <span className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-[10px]">{counts.creditos}</span>
@@ -373,7 +392,7 @@ const WorkAreaList = ({
                         {/* 🔧 NUEVO: los vendedores ahora también tienen acceso a estos filtros,
                             igual que Admin/Contabilidad — pero siempre viendo SOLO sus propias órdenes */}
                         <button onClick={() => setListFilter('por_finalizar')} className={cn("px-4 py-2 text-xs font-bold rounded-md transition-all flex items-center gap-1 shadow-sm border", listFilter === 'por_finalizar' ? "bg-indigo-600 text-white border-indigo-700" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-100")}>
-                            <FileSignature className="h-4 w-4" /> POR CERRAR <span className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-[10px]">{counts.por_finalizar}</span>
+                            <FileSignature className="h-4 w-4" /> VERIFICACIÓN <span className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-[10px]">{counts.por_finalizar}</span>
                         </button>
                         <button onClick={() => setListFilter('creditos')} className={cn("px-4 py-2 text-xs font-bold rounded-md transition-all flex items-center gap-1 shadow-sm border", listFilter === 'creditos' ? "bg-amber-500 text-white border-amber-600" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-100")}>
                             <Wallet className="h-4 w-4" /> CRÉDITOS <span className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-[10px]">{counts.creditos}</span>
@@ -437,6 +456,7 @@ const WorkAreaList = ({
                         <th className="px-6 py-3 whitespace-nowrap">Estado Actual</th> 
                         <th className="px-6 py-3 whitespace-nowrap text-center">Producidos / TOTAL</th>
                         <th className="px-6 py-3 whitespace-nowrap">Fecha ENTREGA</th>
+                        {mostrarEnvio && <th className="px-6 py-3 whitespace-nowrap">Enviada a Producción</th>}
                         <th className="px-6 py-3 whitespace-nowrap">Cliente</th>
                         <th className="px-6 py-3 whitespace-nowrap">Titulo</th>
                         {(user.role === 'Vendedor' || user.role === 'Administrador') && <th className="px-6 py-3 whitespace-nowrap text-center">Acciones</th>}
@@ -490,6 +510,15 @@ const WorkAreaList = ({
                                        {formatDate(order.fechaEntrega || order.fecha_entrega)}
                                    </span>
                                </td>
+                               {mostrarEnvio && (
+                                   <td className="px-6 py-3 whitespace-nowrap text-xs">
+                                       {order.enviada_produccion_at ? (
+                                           <span className="text-slate-700 font-medium">
+                                               {fechaHoraCorta(order.enviada_produccion_at)} <span className="text-slate-400">({tiempoTranscurrido(order.enviada_produccion_at, ahora)})</span>
+                                           </span>
+                                       ) : <span className="text-slate-300" title="Se envió a producción antes de que el sistema guardara esta hora">—</span>}
+                                   </td>
+                               )}
                                <td className="px-6 py-3 text-slate-800 uppercase text-xs font-semibold">{order.cliente || order.cliente_nombre}</td>
                                <td className="px-6 py-3 text-slate-600 uppercase text-xs">{order.tipoLetrero || order.tipo_trabajo}</td>
                                
@@ -509,7 +538,7 @@ const WorkAreaList = ({
                         })
                      ) : (
                         <tr>
-                           <td colSpan={(user.role === 'Vendedor' || user.role === 'Administrador') ? "7" : "6"} className="px-6 py-16 text-center text-slate-500 bg-white">
+                           <td colSpan={((user.role === 'Vendedor' || user.role === 'Administrador') ? 7 : 6) + (mostrarEnvio ? 1 : 0)} className="px-6 py-16 text-center text-slate-500 bg-white">
                               <div className="flex flex-col items-center gap-2">
                                  <Search className="h-8 w-8 text-slate-300" />
                                  <span className="text-lg font-medium text-slate-600">Lista Limpia</span>

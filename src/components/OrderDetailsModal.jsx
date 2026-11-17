@@ -1,5 +1,5 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
-import { empresaActual, monedaActual } from '@/utils/empresa'; // 🔧 Configuración de la Empresa
+import { empresaActual, monedaActual, useModulo } from '@/utils/empresa'; // 🔧 Configuración de la Empresa
 import { supabase } from '../supabaseClient';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -183,7 +183,9 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
     // en 'PRODUCCION' — antes necesitaban esperar a que el Admin lo hiciera, y Producción reportó
     // que esto pasaba muy seguido (faltaba un material que se agotó a último momento).
     const canRevert = user?.role === 'Administrador' || (user?.role === 'Producción' && order?.status === 'PRODUCCION');
-    const showFinancials = user?.role !== 'Producción'; 
+    const showFinancials = user?.role !== 'Producción';
+    // Con el módulo Inventario apagado, Producción finaliza sin elegir materiales (modo servicio / orden libre).
+    const conInventario = useModulo('inventario');
     const status = product.estado_prod || 'PENDIENTE';
     const [loading, setLoading] = useState(false);
     
@@ -319,12 +321,13 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
     };
 
     const handleFinish = async () => {
-        if (!noMaterials && usedMaterials.length === 0) {
+        const sinMat = noMaterials || !conInventario;
+        if (!sinMat && usedMaterials.length === 0) {
             toast({ title: "Faltan Materiales", description: "Debe agregar materiales de inventario o marcar 'No usar inventario'.", variant: "destructive" });
             return;
         }
 
-        if (!noMaterials) {
+        if (!sinMat) {
              const invalidQty = usedMaterials.some(m => !m.cant_usada || Number(m.cant_usada) <= 0);
              if (invalidQty) {
                  toast({ title: "Cantidades Inválidas", description: "Verifique las cantidades de los materiales.", variant: "destructive" });
@@ -335,7 +338,7 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
         setLoading(true);
         
         try {
-            if (!noMaterials && usedMaterials.length > 0) {
+            if (!sinMat && usedMaterials.length > 0) {
                 const stockUpdates = [];
                 for (const mat of usedMaterials) {
                     const qtyToDeduct = Number(mat.cant_usada);
@@ -385,9 +388,9 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                 }
             }
 
-            const updated = { ...product, estado_prod: 'FINALIZADO', materiales: usedMaterials, sin_materiales: noMaterials, materiales_borrador: undefined, sin_materiales_borrador: undefined };
+            const updated = { ...product, estado_prod: 'FINALIZADO', materiales: sinMat ? [] : usedMaterials, sin_materiales: sinMat, materiales_borrador: undefined, sin_materiales_borrador: undefined };
             await onProductUpdate(index, updated);
-            toast({ title: "Producto Finalizado", description: "Se ha registrado la producción y descontado el inventario." });
+            toast({ title: "Producto Finalizado", description: sinMat ? "Se ha registrado la producción." : "Se ha registrado la producción y descontado el inventario." });
         } catch (error) {
             console.error(error);
             toast({ title: "Error de Guardado", description: error.message || "Ocurrió un problema al finalizar el producto.", variant: "destructive" });
@@ -469,6 +472,7 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                            </div>
                            {isProduction ? (
                                <div className="space-y-3">
+                                   {conInventario && <>
                                    <div className="relative">
                                        <Search className="w-4 h-4 absolute left-2.5 top-2 text-slate-400"/>
                                        <input 
@@ -533,8 +537,9 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                                        <input type="checkbox" checked={noMaterials} onChange={e => { const marcado = e.target.checked; setNoMaterials(marcado); const nuevos = marcado ? [] : usedMaterials; if (marcado) setUsedMaterials([]); guardarBorrador(nuevos, marcado, true); }} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"/>
                                        <span className="text-slate-700 font-medium">No utiliza inventario</span>
                                    </label>
+                                   </>}
 
-                                   <Button size="sm" onClick={handleFinish} disabled={loading || (!noMaterials && usedMaterials.length === 0)} className="w-full bg-green-600 hover:bg-green-700 text-white shadow font-bold">
+                                   <Button size="sm" onClick={handleFinish} disabled={loading || (conInventario && !noMaterials && usedMaterials.length === 0)} className="w-full bg-green-600 hover:bg-green-700 text-white shadow font-bold">
                                        {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <CheckCircle2 className="w-4 h-4 mr-2"/>} Finalizar Producto
                                    </Button>
                                </div>
@@ -561,6 +566,7 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                                )}
                            </div>
                            
+                           {(conInventario || !product.sin_materiales) && (
                            <div className="bg-white rounded border border-green-100 p-2">
                                {product.sin_materiales ? (
                                    <div className="text-[10px] text-slate-500 italic flex items-center gap-1"><Ban className="w-3 h-3"/> No se usó inventario</div>
@@ -579,6 +585,7 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                                    </div>
                                )}
                            </div>
+                           )}
                        </div>
                   )}
              </td>
@@ -592,6 +599,10 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
   // 🔧 NUEVO: popup del expediente del cliente (historial + editar), sin salir de la orden
   const [showClientExpediente, setShowClientExpediente] = useState(false);
   const [showTimeline, setShowTimeline] = useState(true); // 🔧 NUEVO: abierta por defecto
+  // Nº de factura escrito desde el aviso del botón de avance. Guarda de qué orden es, para no mostrarlo en otra.
+  const [facturaEscrita, setFacturaEscrita] = useState({ id: null, valor: '' });
+  const [facturaGuardada, setFacturaGuardada] = useState({ id: null, valor: '' });
+  const [guardandoFactura, setGuardandoFactura] = useState(false);
   const { toast } = useToast();
   const [localProducts, setLocalProducts] = useState([]);
   // 🔧 FIX "materiales prellenados de otra OP": se recuerda de qué orden son los productos locales; si todavía son
@@ -695,7 +706,7 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
       preciosIncluyenIva: parsedFinancials.preciosIncluyenIva
   };
 
-  const nroFacturaDisplay = order?.nro_factura || order?.numero_factura || parsedFinancials.nroFactura || order?.numeroFactura || order?.facturaNumber || order?.invoiceNumber || 'PENDIENTE';
+  const nroFacturaDisplay = (facturaGuardada.id === order?.id && facturaGuardada.valor) || String(order?.nro_factura || order?.numero_factura || parsedFinancials.nroFactura || order?.numeroFactura || order?.facturaNumber || order?.invoiceNumber || '').trim() || 'PENDIENTE';
 
   const anticipoVal = Number(order?.anticipo || 0);
   const retencion = Number(order?.retencion || parsedFinancials.retencion || 0);
@@ -721,6 +732,25 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
 
   // 🔧 CAMBIO 10.1: en 'POR COBRAR' no se puede finalizar (ni el Admin) mientras quede saldo.
   const lockPorCobrar = order?.status === 'POR COBRAR' && saldoCalculado > 0.01;
+
+  // Con IVA (incluido o sumado) no se cierra la orden sin el Nº de factura. Sin IVA sí puede pasar.
+  const lockFactura = isGoingToCierre && fin.iva > 0.001 && nroFacturaDisplay === 'PENDIENTE';
+  const textoFactura = facturaEscrita.id === order?.id ? facturaEscrita.valor : '';
+  const guardarFactura = async () => {
+      const valor = textoFactura.trim();
+      if (!valor) return;
+      setGuardandoFactura(true);
+      try {
+          const { error } = await supabase.from('ordenes').update({ financials: { ...parsedFinancials, nroFactura: valor } }).eq('id', order.id);
+          if (error) throw error;
+          setFacturaGuardada({ id: order.id, valor });
+          toast({ title: "Nº de factura guardado", description: `Factura ${valor}. Ya puedes continuar.` });
+      } catch (err) {
+          toast({ title: "No se guardó el Nº de factura", description: err.message, variant: "destructive" });
+      } finally {
+          setGuardandoFactura(false);
+      }
+  };
 
   const historialCredito = parsedFinancials.historialFechasCredito || [];
   // 🔧 Respaldo de la venta a crédito: desde cuándo, hasta qué fecha, si pasó a Impagas y cuándo se pagó. Queda visible
@@ -1439,6 +1469,23 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                                          <Button size="lg" className="bg-amber-500 cursor-not-allowed text-white font-bold text-lg px-8 py-6 shadow-sm flex items-center gap-3" title="Debes cobrar el saldo pendiente (o dejarlo a crédito) antes de finalizar la orden">{workflowConfig.text}<Ban className="h-6 w-6 opacity-50" /></Button>
                                     ) : lockPorCobrar ? (
                                          <Button size="lg" className="bg-amber-500 cursor-not-allowed text-white font-bold text-lg px-8 py-6 shadow-sm flex items-center gap-3" title="Esta orden aún tiene saldo por cobrar. Registra el cobro (Abono) para poder finalizarla.">{workflowConfig.text}<Ban className="h-6 w-6 opacity-50" /></Button>
+                                    ) : lockFactura ? (
+                                         <div className="flex flex-col items-end gap-2">
+                                             <div className="flex items-center gap-2 bg-amber-50 border border-amber-300 rounded-lg p-2">
+                                                 <FileText className="h-4 w-4 text-amber-600 shrink-0" />
+                                                 <input
+                                                   className="border border-amber-300 rounded px-2 py-1.5 text-sm w-48 uppercase focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                                   placeholder="Nº de factura (001-001-…)"
+                                                   value={textoFactura}
+                                                   onChange={(e) => setFacturaEscrita({ id: order.id, valor: e.target.value })}
+                                                   onKeyDown={(e) => { if (e.key === 'Enter') guardarFactura(); }}
+                                                 />
+                                                 <Button size="sm" disabled={!textoFactura.trim() || guardandoFactura} onClick={guardarFactura} className="bg-amber-600 hover:bg-amber-700 text-white">
+                                                     {guardandoFactura ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar'}
+                                                 </Button>
+                                             </div>
+                                             <Button size="lg" className="bg-amber-500 cursor-not-allowed text-white font-bold text-lg px-8 py-6 shadow-sm flex items-center gap-3" title="La orden tiene IVA: ingresa el Nº de factura para continuar">{workflowConfig.text}<Ban className="h-6 w-6 opacity-50" /></Button>
+                                         </div>
                                     ) : order.status === 'PRODUCCION' && !allProductsFinished ? (
                                          <Button size="lg" className="bg-slate-400 cursor-not-allowed text-white font-bold text-lg px-8 py-6 shadow-sm flex items-center gap-3" title="Debes finalizar todos los productos primero">{workflowConfig.text}<Ban className="h-6 w-6 opacity-50" /></Button>
                                     ) : order.status === 'VERIFICACIÓN' && pagosPendientesDeVerificar ? (
@@ -1486,7 +1533,7 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                                                }
 
                                                onClose();
-                                               await onAdvanceWorkflow(order);
+                                               await onAdvanceWorkflow(facturaGuardada.id === order.id ? { ...order, financials: { ...parsedFinancials, nroFactura: facturaGuardada.valor } } : order);
                                            }}
                                          >
                                            {workflowConfig.text}
@@ -1494,7 +1541,7 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                                          </Button>
                                     )}
                                     <span className="text-xs text-slate-500 font-medium px-2">
-                                        {!canAdvance ? '⚠️ Tu rol no permite avanzar esta etapa' : lockCobroSaldo ? '⚠️ Debes registrar el cobro del saldo (o dejarlo a crédito) antes de finalizar' : lockPorCobrar ? `⚠️ Saldo por cobrar: ${formatCurrency(saldoCalculado)} — registra el cobro para poder finalizar` : (order.status === 'PRODUCCION' && !allProductsFinished ? '⚠️ Debes finalizar todos los productos en la tabla superior' : (order.status === 'VERIFICACIÓN' && pagosPendientesDeVerificar ? '⚠️ Esperando que el Admin verifique los pagos (Centro de Notificaciones)' : workflowConfig.helper))}
+                                        {!canAdvance ? '⚠️ Tu rol no permite avanzar esta etapa' : lockCobroSaldo ? '⚠️ Debes registrar el cobro del saldo (o dejarlo a crédito) antes de finalizar' : lockPorCobrar ? `⚠️ Saldo por cobrar: ${formatCurrency(saldoCalculado)} — registra el cobro para poder finalizar` : lockFactura ? '⚠️ La orden tiene IVA: ingresa el Nº de factura para continuar' : (order.status === 'PRODUCCION' && !allProductsFinished ? '⚠️ Debes finalizar todos los productos en la tabla superior' : (order.status === 'VERIFICACIÓN' && pagosPendientesDeVerificar ? '⚠️ Esperando que el Admin verifique los pagos (Centro de Notificaciones)' : workflowConfig.helper))}
                                     </span>
                                 </>
                             )}

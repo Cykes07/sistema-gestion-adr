@@ -35,7 +35,7 @@ export const conFactura = (o) => num(fin(o).iva) > 0;
 export const retencionDe = (o) => num(o?.retencion) || num(fin(o).retencion);
 export const porcentajeRetencionDe = (o) => {
   const p = num(fin(o).retentionPercent) || num(o?.retentionPercent);
-  if (p > 0) return p;
+  if (p > 0) return Math.round(p * 100) / 100;
   const base = baseImponibleDe(o);
   return base > 0 && retencionDe(o) > 0 ? Math.round((retencionDe(o) / base) * 10000) / 100 : 0;
 };

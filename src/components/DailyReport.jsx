@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { isUserInList } from '@/utils/userMatch';
+import { momentoDelDia, momentoDelAbono, horaCorta, ordenarPorMomento, claseMetodo, claseNota } from '@/utils/movimientosDia';
 
 // 🔥 BÚSQUEDA INTELIGENTE DE NOMBRES 🔥
 const normalizeName = (name) => {
@@ -316,6 +317,9 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
         || isUserMatch(o.recibido_por_saldo, targetUserName, o.recibido_por_saldo_id, targetUserId)
     );
 
+    const clienteDe = (o) => o.cliente || o.cliente_nombre || 'Cliente General';
+    const tituloDe = (o) => o.tipoLetrero || o.tipo_trabajo || '';
+
     relevantOrders.forEach(o => {
       const creationDate = toLocalDateStr(o.createdAt || o.created_at);
       if (creationDate === selectedDate) {
@@ -324,7 +328,7 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
           if (cobroAnticipo && Number(o.anticipo) > 0) {
               const numOrden = o.order_number || o.orderNumber || o.id;
               txs.push({
-                id: `sale-${o.id}`, type: 'VENTA', description: o.cliente, details: `${o.tipoLetrero || o.tipo_trabajo || ''} — Anticipo #${numOrden}`, orderNumber: numOrden, income: Number(o.anticipo), expense: 0, balanceNote: o.financials?.saldo > 0 ? `Saldo pdte` : 'PAGADO', isManual: false, isAnulada: false, originalOrder: o, paymentMethod: o.formaPagoAnticipo || o.forma_pago_anticipo || 'EFECTIVO' 
+                id: `sale-${o.id}`, type: 'VENTA', description: clienteDe(o), details: tituloDe(o), orderNumber: numOrden, income: Number(o.anticipo), expense: 0, balanceNote: (Number(o.financials?.total) || 0) - Number(o.anticipo) - (Number(o.retencion) || 0) > 0.01 ? 'SALDO PDTE' : 'PAGADO', momento: momentoDelDia(o.createdAt || o.created_at, selectedDate), isManual: false, isAnulada: false, originalOrder: o, paymentMethod: o.formaPagoAnticipo || o.forma_pago_anticipo || 'EFECTIVO' 
               });
           }
       }
@@ -334,7 +338,7 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
           if (abonoDateStr === selectedDate && isUserMatch(abono.cobrador, targetUserName, abono.cobrador_id, targetUserId)) {
                const numOrden = o.order_number || o.orderNumber || o.id;
                txs.push({
-                  id: `abono-${abono.id}`, type: 'ABONO', description: o.cliente, details: `${o.tipoLetrero || o.tipo_trabajo || ''} — Abono #${numOrden} ${abono.nota ? `(${abono.nota})` : ''}`, orderNumber: numOrden, income: Number(abono.monto), expense: 0, balanceNote: 'ABONO REGISTRADO', isManual: false, isAnulada: false, originalOrder: o, abonoId: abono.id, paymentMethod: abono.metodoPago || abono.metodo_pago || abono.forma_pago || abono.formaPago || 'EFECTIVO' 
+                  id: `abono-${abono.id}`, type: 'ABONO', description: clienteDe(o), details: tituloDe(o), orderNumber: numOrden, income: Number(abono.monto), expense: 0, balanceNote: 'ABONO REGISTRADO', momento: momentoDelAbono(abono), isManual: false, isAnulada: false, originalOrder: o, abonoId: abono.id, paymentMethod: abono.metodoPago || abono.metodo_pago || abono.forma_pago || abono.formaPago || 'EFECTIVO' 
                });
           }
       });
@@ -356,7 +360,7 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
               || (!o.recibido_por_saldo && !o.recibido_por_saldo_id && isUserInList(o.vendedor_ids, o.vendedor, { id: targetUserId, name: targetUserName }));
           if (cobroSaldo) {
               const numOrden = o.order_number || o.orderNumber || o.id;
-              const titulo = o.tipoLetrero || o.tipo_trabajo || '';
+              const momento = momentoDelDia(o.fecha_pago_saldo || o.updatedAt || o.updated_at, selectedDate);
               // 🔧 NUEVO: separamos "RETIRO" (la orden se completó, se cobró o ya estaba
               // pagada — 'sin saldo' pendiente) de "CRÉDITO" (se movió adelante pero
               // quedó con saldo pendiente a crédito, sin cobrar nada en este momento).
@@ -364,9 +368,9 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
               const pSaldo = String(o.formaPagoSaldo || o.forma_pago_saldo || '').toLowerCase();
               const esCredito = (pSaldo.includes('crédit') || pSaldo.includes('credit')) && saldoFinalReal > 0.01;
               if (esCredito) {
-                  txs.push({ id: `pickup-${o.id}`, type: 'CRÉDITO', description: o.cliente, details: `${titulo} — Crédito #${numOrden}`, orderNumber: numOrden, income: 0, expense: 0, balanceNote: 'A CRÉDITO', isManual: false, isAnulada: false, originalOrder: o, paymentMethod: o.formaPagoSaldo || o.forma_pago_saldo || 'CRÉDITO' });
+                  txs.push({ id: `pickup-${o.id}`, type: 'CRÉDITO', description: clienteDe(o), details: tituloDe(o), orderNumber: numOrden, income: 0, expense: 0, balanceNote: 'A CRÉDITO', momento, horaAproximada: true, isManual: false, isAnulada: false, originalOrder: o, paymentMethod: o.formaPagoSaldo || o.forma_pago_saldo || 'CRÉDITO' });
               } else {
-                  txs.push({ id: `pickup-${o.id}`, type: 'RETIRO', description: o.cliente, details: `${titulo} — Retiro #${numOrden}`, orderNumber: numOrden, income: saldoFinalReal, expense: 0, balanceNote: 'COMPLETADO', isManual: false, isAnulada: false, originalOrder: o, paymentMethod: o.formaPagoSaldo || o.forma_pago_saldo || 'EFECTIVO' });
+                  txs.push({ id: `pickup-${o.id}`, type: 'RETIRO', description: clienteDe(o), details: tituloDe(o), orderNumber: numOrden, income: saldoFinalReal, expense: 0, balanceNote: 'COMPLETADO', momento, horaAproximada: true, isManual: false, isAnulada: false, originalOrder: o, paymentMethod: o.formaPagoSaldo || o.forma_pago_saldo || 'EFECTIVO' });
               }
           }
       }
@@ -379,13 +383,13 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
                 || (!o.recibido_por_anticipo && !o.recibido_por_anticipo_id && isUserInList(o.vendedor_ids, o.vendedor, { id: targetUserId, name: targetUserName }));
             if (cobroOriginal && Number(o.anticipo) > 0) {
                 const numOrden = o.order_number || o.orderNumber || o.id;
-                txs.push({ id: `cancel-${o.id}`, type: 'ANULACIÓN', description: o.cliente, details: `${o.tipoLetrero || o.tipo_trabajo || ''} — Anulación #${numOrden}`, orderNumber: numOrden, income: 0, expense: Number(o.anticipo), balanceNote: 'ANULADO', isManual: false, isAnulada: true, originalOrder: o, paymentMethod: o.formaPagoAnticipo || o.forma_pago_anticipo || 'EFECTIVO' });
+                txs.push({ id: `cancel-${o.id}`, type: 'ANULACIÓN', description: clienteDe(o), details: tituloDe(o), orderNumber: numOrden, income: 0, expense: Number(o.anticipo), balanceNote: 'ANULADO', momento: momentoDelDia(o.updatedAt || o.updated_at, selectedDate), horaAproximada: true, isManual: false, isAnulada: true, originalOrder: o, paymentMethod: o.formaPagoAnticipo || o.forma_pago_anticipo || 'EFECTIVO' });
             }
         }
     });
     
     valesDelDia.forEach(vale => {
-        txs.push({ id: `vale-${vale.id}`, type: 'VALE CAJA', description: vale.concepto, details: vale.recibido_por ? `A: ${vale.recibido_por} (Aprobado)` : '(Aprobado)', orderNumber: `VC-${String(vale.id).padStart(5, '0')}`, income: 0, expense: Number(vale.monto), balanceNote: 'EGRESO', isManual: false, isAnulada: false, isVale: true, paymentMethod: 'EFECTIVO' });
+        txs.push({ id: `vale-${vale.id}`, type: 'VALE CAJA', description: vale.concepto, details: vale.recibido_por ? `A: ${vale.recibido_por}` : '', orderNumber: `VC-${String(vale.id).padStart(5, '0')}`, income: 0, expense: Number(vale.monto), balanceNote: 'EGRESO', momento: momentoDelDia(vale.created_at, selectedDate), isManual: false, isAnulada: false, isVale: true, paymentMethod: 'EFECTIVO' });
     });
 
     return txs;
@@ -395,7 +399,10 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
   // usarse en visibleTransactions más abajo)
   const [txSearchTerm, setTxSearchTerm] = useState('');
 
-  const allTransactions = useMemo(() => [...automaticTransactions, ...ledgerData.manualTransactions], [automaticTransactions, ledgerData]);
+  const allTransactions = useMemo(() => ordenarPorMomento([
+      ...automaticTransactions,
+      ...ledgerData.manualTransactions.map(tx => ({ ...tx, momento: momentoDelDia(Number(tx.id), selectedDate) })),
+  ]), [automaticTransactions, ledgerData, selectedDate]);
 
   // 🔧 NUEVO: filtro de búsqueda (por descripción/cliente, detalle, o Nº de orden)
   const visibleTransactions = useMemo(() => {
@@ -604,6 +611,7 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
                     <table className="w-full text-sm">
                         <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 text-xs uppercase sticky top-0 z-10">
                             <tr>
+                                <th className="px-3 py-3 text-center w-14">Hora</th>
                                 <th className="px-3 py-3 text-center w-10">#</th>
                                 <th className="px-3 py-3 text-left font-bold">Descripción del Movimiento</th>
                                 <th className="px-3 py-3 text-center">Orden</th>
@@ -626,9 +634,12 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
                                 className={cn(
                                     "transition-colors group",
                                     !tx.isManual && !tx.isVale ? "cursor-pointer" : "",
-                                    tx.isAnulada ? "bg-red-50/50" : tx.isVale ? "bg-red-50/30" : !isEfectivo ? "bg-indigo-50/30 hover:bg-indigo-50" : "hover:bg-blue-50"
+                                    tx.isAnulada ? "bg-red-50/50" : tx.isVale ? "bg-red-50/30" : "hover:bg-slate-50"
                                 )}
                             >
+                                <td className="px-3 py-2.5 text-center font-mono text-xs text-slate-600 whitespace-nowrap" title={tx.momento && tx.horaAproximada ? 'Hora de la última modificación de la orden' : undefined}>
+                                    {tx.momento ? <>{horaCorta(tx.momento)}{tx.horaAproximada && <span className="text-slate-400">*</span>}</> : <span className="text-slate-300">—</span>}
+                                </td>
                                 <td className="px-3 py-2.5 text-center text-slate-400 font-bold text-xs">{idx + 1}</td>
                                 
                                 <td className="px-3 py-2.5">
@@ -642,7 +653,7 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
                                                 <span className={tipoColor}>{tx.type}</span>
                                                 <span className="text-slate-400 mx-1">-</span>
                                                 <span className="text-slate-800">{tx.description}</span>
-                                                {tx.details && <><span className="text-slate-400 mx-1">-</span><span className="text-slate-500 font-medium normal-case">{tx.details}</span></>}
+                                                {tx.details && <><span className="text-slate-400 mx-1">-</span><span className="text-slate-600">{tx.details}</span></>}
                                             </span>
                                         )}
                                     </div>
@@ -658,7 +669,7 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
                                             <option value="EFECTIVO">EFECTIVO</option><option value="TRANSFERENCIA">TRANSFERENCIA</option><option value="TARJETA">TARJETA</option><option value="CHEQUE">CHEQUE</option>
                                         </select>
                                     ) : (
-                                        <span className={cn("text-xs px-2 py-1 rounded-md font-medium inline-block", isEfectivo ? "bg-emerald-50 text-emerald-700" : "bg-indigo-50 text-indigo-700")}>
+                                        <span className={cn("text-[11px] px-2 py-0.5 rounded-md font-semibold uppercase inline-block", claseMetodo(formatPaymentMethod(tx.paymentMethod)))}>
                                             {formatPaymentMethod(tx.paymentMethod).split('-')[0].trim()}
                                         </span>
                                     )}
@@ -667,8 +678,8 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
                                 <td className="px-3 py-2.5 text-right font-bold">
                                    {tx.isManual && isEditable ? <input type="number" className="w-full text-right bg-transparent outline-none" value={tx.income} onChange={(e) => updateManualTransaction(tx.id, 'income', e.target.value)} /> : (Number(tx.income) > 0 ? (
                                        <div className="flex flex-col items-end">
-                                           <span className={isEfectivo ? "text-green-600" : "text-indigo-600 opacity-80"}>${Number(tx.income).toFixed(2)}</span>
-                                           {!isEfectivo && <span className="text-[9px] leading-none uppercase text-indigo-500 mt-0.5">No suma a caja</span>}
+                                           <span className={isEfectivo ? "text-green-600" : "text-purple-600 opacity-80"}>${Number(tx.income).toFixed(2)}</span>
+                                           {!isEfectivo && <span className="text-[9px] leading-none uppercase text-purple-500 mt-0.5">No suma a caja</span>}
                                        </div>
                                    ) : <span className="text-slate-300">-</span>)}
                                 </td>
@@ -676,14 +687,14 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
                                 <td className="px-3 py-2.5 text-right font-bold">
                                    {tx.isManual && isEditable ? <input type="number" className="w-full text-right bg-transparent outline-none" value={tx.expense} onChange={(e) => updateManualTransaction(tx.id, 'expense', e.target.value)} /> : (Number(tx.expense) > 0 ? (
                                        <div className="flex flex-col items-end">
-                                           <span className={isEfectivo ? "text-red-600" : "text-indigo-600 opacity-80"}>${Number(tx.expense).toFixed(2)}</span>
-                                           {!isEfectivo && <span className="text-[9px] leading-none uppercase text-indigo-500 mt-0.5">No suma a caja</span>}
+                                           <span className={isEfectivo ? "text-red-600" : "text-purple-600 opacity-80"}>${Number(tx.expense).toFixed(2)}</span>
+                                           {!isEfectivo && <span className="text-[9px] leading-none uppercase text-purple-500 mt-0.5">No suma a caja</span>}
                                        </div>
                                    ) : <span className="text-slate-300">-</span>)}
                                 </td>
                                 
                                 <td className="px-3 py-2.5 text-center text-xs text-slate-600">
-                                   {tx.isManual && isEditable ? <input className="w-full bg-transparent outline-none text-center" value={tx.balanceNote} onChange={(e) => updateManualTransaction(tx.id, 'balanceNote', e.target.value)} /> : <span className={cn(tx.balanceNote?.includes('DEBE') ? "text-red-600 bg-red-50 px-1.5 py-0.5 rounded" : "text-green-700")}>{tx.balanceNote}</span>}
+                                   {tx.isManual && isEditable ? <input className="w-full bg-transparent outline-none text-center" value={tx.balanceNote} onChange={(e) => updateManualTransaction(tx.id, 'balanceNote', e.target.value)} /> : (tx.balanceNote ? <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full whitespace-nowrap", claseNota(tx.balanceNote))}>{tx.balanceNote}</span> : <span className="text-slate-300">-</span>)}
                                 </td>
                                 
                                 <td className="px-2 py-2.5 print:hidden">

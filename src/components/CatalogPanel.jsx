@@ -7,9 +7,11 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
 import ComponentesInventarioEditor from './ComponentesInventarioEditor';
+import { useModulo } from '@/utils/empresa';
 
 const CatalogPanel = ({ user }) => {
   const { toast } = useToast();
+  const conInventario = useModulo('inventario');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadingCSV, setUploadingCSV] = useState(false);
@@ -777,11 +779,11 @@ const CatalogPanel = ({ user }) => {
                             </div>
                         </div>
 
-                        <ComponentesInventarioEditor
+                        {conInventario && <ComponentesInventarioEditor
                             componentes={formData.componentes_inventario || []}
                             porMetro={formData.es_por_metro}
                             onChange={(componentes) => setFormData(prev => ({ ...prev, componentes_inventario: componentes }))}
-                        />
+                        />}
                     </div>
 
                     <div className="bg-slate-100 p-4 border-t border-slate-200 flex justify-end gap-3 shrink-0">

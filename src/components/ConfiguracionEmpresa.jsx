@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Building2, Image as ImageIcon, Palette, Percent, Save, Loader2, Upload, RotateCcw, Check, AlertTriangle, Clock } from 'lucide-react';
+import { Building2, Image as ImageIcon, Palette, Percent, Save, Loader2, Upload, RotateCcw, Check, AlertTriangle, Clock, Blocks, Package, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/Text';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { EMPRESA_POR_DEFECTO, MONEDAS, TEMAS, INTERVALOS_ENTREGA, completarEmpresa, guardarEmpresa, previsualizarEmpresa, imagenADataUrl } from '@/utils/empresa';
+import { EMPRESA_POR_DEFECTO, MONEDAS, TEMAS, INTERVALOS_ENTREGA, MODULOS, completarEmpresa, guardarEmpresa, previsualizarEmpresa, imagenADataUrl } from '@/utils/empresa';
+
+const ICONO_MODULO = { inventario: Package, comisiones: TrendingUp };
 import { listaDeHorarios } from '@/utils/horariosEntrega';
 
 // 🔧 NUEVO (23-oct): módulo "Configuración de la Empresa" (solo Administrador).
@@ -287,6 +289,39 @@ const ConfiguracionEmpresa = () => {
                         })() : (
                             <p className="text-xs font-bold text-red-600">La última entrega debe ser después de la primera.</p>
                         )}
+                    </CardContent>
+                </Card>
+
+                {/* 6. MÓDULOS DEL SISTEMA */}
+                <Card className="border-slate-200 shadow-md lg:col-span-2">
+                    <CardHeader className="bg-slate-50 pb-4">
+                        <CardTitle className="flex items-center gap-2 text-slate-800"><Blocks className="h-5 w-5" /> Módulos del Sistema</CardTitle>
+                        <CardDescription>Enciende solo lo que tu negocio usa. Apagar un módulo no borra nada: sus datos quedan guardados y vuelven a verse al encenderlo.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {MODULOS.map(m => {
+                            const Icono = ICONO_MODULO[m.id] || Blocks;
+                            const activo = form[m.campo] !== 'no';
+                            return (
+                                <div key={m.id} className={`rounded-xl border-2 p-4 flex gap-4 items-start transition-colors ${activo ? 'border-green-300 bg-green-50/40' : 'border-slate-200 bg-slate-50'}`}>
+                                    <div className={`p-2.5 rounded-lg shrink-0 ${activo ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'}`}><Icono className="h-5 w-5" /></div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="font-bold text-slate-800">{m.nombre}</p>
+                                            <button
+                                                type="button" role="switch" aria-checked={activo} aria-label={`${activo ? 'Apagar' : 'Encender'} ${m.nombre}`}
+                                                onClick={() => cambiar(m.campo, activo ? 'no' : 'si')}
+                                                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${activo ? 'bg-green-500' : 'bg-slate-300'}`}
+                                            >
+                                                <span className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${activo ? 'translate-x-5' : ''}`} />
+                                            </button>
+                                        </div>
+                                        <p className={`text-[11px] font-bold uppercase tracking-wide mt-0.5 ${activo ? 'text-green-700' : 'text-slate-500'}`}>{activo ? 'Encendido' : 'Apagado'}</p>
+                                        <p className="text-xs text-slate-500 mt-2 leading-relaxed">{m.descripcion}</p>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </CardContent>
                 </Card>
             </div>

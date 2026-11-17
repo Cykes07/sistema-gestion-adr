@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, Users, FileText, Briefcase, Settings, BarChart2, LogOut, ChevronRight, ChevronDown, UserCircle, Shield, Receipt, FileSpreadsheet, Package, ShieldCheck, BookOpen, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEmpresa } from '@/utils/empresa';
+import { useEmpresa, moduloActivo, vistaDisponible } from '@/utils/empresa';
 
 const MenuItem = ({ item, isActive, currentView, onClick, onSubItemClick }) => {
   const Icon = item.icon;
@@ -154,6 +154,14 @@ const Sidebar = ({ user, onLogout, currentView, onViewChange, allowedViews = [] 
     if (!isAllowed(item.id)) return null;
 
     return item;
+  }).filter(Boolean).map(item => {
+    // Módulos apagados en Configuración de la Empresa: sus pantallas salen del menú.
+    if (!vistaDisponible(item.id, empresa)) return null;
+    if (!item.submenu) return item;
+    const submenu = item.submenu.filter(sub => vistaDisponible(sub.id, empresa));
+    if (item.submenu.length && !submenu.length) return null;
+    const label = item.id === 'inventario' && !moduloActivo('inventario', empresa) ? 'Catálogo' : item.label;
+    return { ...item, submenu, label };
   }).filter(Boolean);
 
   return (
