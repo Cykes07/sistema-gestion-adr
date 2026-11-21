@@ -642,7 +642,7 @@ const OrdersPanel = ({
                           </td>
                       )}
                       {!isProduccion && (
-                          <td className={`px-2 py-3 text-right font-bold whitespace-nowrap ${saldoReal > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          <td className={`px-2 py-3 text-right font-bold whitespace-nowrap ${saldoReal > 0.01 ? 'text-red-600' : 'text-green-600'}`}>
                             {formatCurrency(saldoReal)}
                           </td>
                       )}
@@ -705,7 +705,7 @@ const OrdersPanel = ({
                                 {/* 🔧 FIX: Contabilidad NUNCA debe poder "cobrar" — eso crea una caja
                                     a su nombre, y Contabilidad no debe manejar caja en absoluto.
                                     Solo Admin o el vendedor asignado pueden registrar el cobro. */}
-                                {saldoReal > 0 && onAbonoOrder && canCollectPayment(order) && (
+                                {saldoReal > 0.01 && onAbonoOrder && canCollectPayment(order) && (
                                   <Button variant="ghost" size="icon" onClick={() => onAbonoOrder(order)} title="Registrar Abono" className="h-7 w-7 text-emerald-600 hover:bg-emerald-50">
                                       <Coins className="h-3.5 w-3.5" />
                                   </Button>

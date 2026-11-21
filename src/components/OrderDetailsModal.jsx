@@ -728,7 +728,8 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
   // debe cobrar el saldo (o dejarlo a crédito) antes de cerrar la orden.
   const isGoingToCierre = order?.status === 'VENTAS POR RETIRAR' || (order?.status === 'VENTAS' && isVCStatus);
 
-  const lockCobroSaldo = isGoingToCierre && !isCredito && saldoCalculado > 0 && !isAdmin;
+  // Centavo de tolerancia: 27.60 - 20 - 7.60 da 0.0000000000000018 y no 0.
+  const lockCobroSaldo = isGoingToCierre && !isCredito && saldoCalculado > 0.01 && !isAdmin;
 
   // 🔧 CAMBIO 10.1: en 'POR COBRAR' no se puede finalizar (ni el Admin) mientras quede saldo.
   const lockPorCobrar = order?.status === 'POR COBRAR' && saldoCalculado > 0.01;
@@ -1291,7 +1292,7 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                                 <div className="flex-1 w-full">
                                     <div className="flex justify-between items-center mb-2 border-b border-blue-100 pb-2">
                                         <span className="text-blue-800 font-bold text-sm">Saldo Pendiente (Real)</span>
-                                        <span className={`text-lg font-bold ${saldoCalculado > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(saldoCalculado)}</span>
+                                        <span className={`text-lg font-bold ${saldoCalculado > 0.01 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(saldoCalculado)}</span>
                                     </div>
                                     <div className="space-y-1 text-xs text-slate-600 mb-2">
                                          <div className="flex justify-between"><span>Forma Pago:</span> <span className="font-bold text-slate-900 uppercase">{order.formaPagoSaldo || parsedFinancials.formaPagoSaldo || '-'}</span></div>
