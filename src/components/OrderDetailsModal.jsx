@@ -18,6 +18,8 @@ import MedidaProducto from './MedidaProducto';
 import DiferenciaPrecio from './DiferenciaPrecio';
 import TarifasVolumen from './TarifasVolumen';
 import ProductoCatalogoModal, { puedeEditarCatalogo } from './ProductoCatalogoModal';
+import EmitirFacturaModal from './EmitirFacturaModal';
+import { useFacturacion } from '@/utils/facturaElectronica';
 import { historialDelCredito, fechaCorta } from '@/utils/historialCredito'; // 🔧 historial del crédito (23-oct)
 
 // 🔧 CAMBIO 10 (Fase 1+2): sin 'CONTABILIDAD'. 'VERIFICACIÓN' se inserta
@@ -649,6 +651,9 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
   const showFinancials = user?.role !== 'Producción'; 
   const isAdmin = user?.role === 'Administrador';
   const isVendedor = user?.role === 'Vendedor';
+  // Factura electrónica del SRI: solo aparece donde está activa (hoy ADR); en las demás empresas `facturacion` queda en null.
+  const facturacion = useFacturacion(isAdmin || isVendedor);
+  const [facturaModalOrden, setFacturaModalOrden] = useState(null);
   const isProduccion = user?.role === 'Producción';
   
   const canEditProductionStatus = isAdmin || isProduccion;
@@ -792,6 +797,14 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
 
   // Con IVA (incluido o sumado) no se cierra la orden sin el Nº de factura. Sin IVA sí puede pasar.
   const lockFactura = isGoingToCierre && fin.iva > 0.001 && nroFacturaDisplay === 'PENDIENTE';
+  const facturaElectronica = parsedFinancials.facturaElectronica || null;
+  const facturaEnPruebas = facturacion?.ambiente !== 'PRODUCCIÓN';
+  const puedeFacturarSRI = !!facturacion && (isAdmin || isVendedor) && fin.iva > 0.001 && nroFacturaDisplay === 'PENDIENTE'
+      && !['ANULADA', 'ARCHIVADA'].includes(order?.status);
+  const abrirFacturaElectronica = () => setFacturaModalOrden(order.id);
+  const alEmitirFactura = (r) => {
+      if (r.estado === 'AUTORIZADO' && !facturaEnPruebas) setFacturaGuardada({ id: order.id, valor: r.numero });
+  };
   const textoFactura = facturaEscrita.id === order?.id ? facturaEscrita.valor : '';
   const guardarFactura = async () => {
       const valor = textoFactura.trim();
@@ -1142,13 +1155,20 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                             <span className="font-bold text-right text-slate-600">N° Factura:</span>
                             <div className="flex items-center">
                                 {nroFacturaDisplay !== 'PENDIENTE' ? (
-                                    <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 flex items-center gap-1 shadow-sm">
+                                    <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 flex items-center gap-1 shadow-sm"
+                                        title={facturaElectronica ? `Factura electrónica autorizada por el SRI${facturaElectronica.numeroAutorizacion ? ` · Autorización ${facturaElectronica.numeroAutorizacion}` : ''}` : undefined}>
                                         <FileText className="h-3 w-3" /> {nroFacturaDisplay}
+                                        {facturaElectronica && <span className="ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1">ELECTRÓNICA ✓</span>}
                                     </span>
                                 ) : (
                                     <span className="text-xs font-medium text-slate-400 italic flex items-center gap-1">
                                         No asignada
                                     </span>
+                                )}
+                                {puedeFacturarSRI && (
+                                    <button type="button" onClick={abrirFacturaElectronica} className="ml-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded px-2 py-0.5 flex items-center gap-1">
+                                        <FileCheck className="h-3 w-3" /> Emitir factura electrónica{facturaEnPruebas ? ' (prueba)' : ''}
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -1529,6 +1549,12 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                                          <Button size="lg" className="bg-amber-500 cursor-not-allowed text-white font-bold text-lg px-8 py-6 shadow-sm flex items-center gap-3" title="Esta orden aún tiene saldo por cobrar. Registra el cobro (Abono) para poder finalizarla.">{workflowConfig.text}<Ban className="h-6 w-6 opacity-50" /></Button>
                                     ) : lockFactura ? (
                                          <div className="flex flex-col items-end gap-2">
+                                             {puedeFacturarSRI && (
+                                                 <Button size="sm" onClick={abrirFacturaElectronica} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+                                                     <FileCheck className="h-4 w-4" /> Emitir factura electrónica{facturaEnPruebas ? ' (prueba)' : ''}
+                                                 </Button>
+                                             )}
+                                             {puedeFacturarSRI && <span className="text-[11px] text-slate-500">o escribe el número de una factura hecha en la página del SRI:</span>}
                                              <div className="flex items-center gap-2 bg-amber-50 border border-amber-300 rounded-lg p-2">
                                                  <FileText className="h-4 w-4 text-amber-600 shrink-0" />
                                                  <input
@@ -1650,6 +1676,17 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                 );
             })()}
         </div>
+
+        {facturaModalOrden === order.id && facturacion && (
+            <EmitirFacturaModal
+                key={order.id}
+                order={order}
+                clients={clients}
+                estado={facturacion}
+                onClose={() => setFacturaModalOrden(null)}
+                onEmitida={alEmitirFactura}
+            />
+        )}
 
         {productoCatalogoEditando && (
             <ProductoCatalogoModal
