@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { UserPlus, Users, Trash2, Pencil, X, Lock, AlertTriangle, Power, PowerOff } from 'lucide-react';
+import { useEmpresa } from '@/utils/empresa';
 
 const DOMINIO_INTERNO = "@graficasadr.com"; 
 
@@ -17,6 +18,7 @@ const UserManagement = () => {
   const [originalUsername, setOriginalUsername] = useState(''); // 🔧 NUEVO: para saber si de verdad cambió
   const [userToDelete, setUserToDelete] = useState(null); 
   const { toast } = useToast();
+  const { dominioUsuario } = useEmpresa();
 
   useEffect(() => {
     fetchUsers();
@@ -192,7 +194,7 @@ const UserManagement = () => {
                     placeholder="ej: juanperez"
                     required
                   />
-                  <span className="text-xs text-gray-400 font-mono hidden md:block">{DOMINIO_INTERNO}</span>
+                  {dominioUsuario && <span className="text-xs text-gray-400 font-mono hidden md:block">{dominioUsuario}</span>}
                 </div>
                 {editingId && (
                     <p className="text-[10px] text-amber-600 mt-1">

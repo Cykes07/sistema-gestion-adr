@@ -1,3 +1,14 @@
+import { retencionDe } from './conciliacion';
+
+// Valor de una orden para comisiones y metas = Total a Pagar: Total Factura (ya con descuento e IVA) menos la retención,
+// porque la retención no llega a caja (decisión del cliente, 22-nov). Antes se usaba el Total Factura.
+export const montoComision = (o) => {
+    let fin = o?.financials;
+    if (typeof fin === 'string') { try { fin = JSON.parse(fin); } catch (e) { fin = {}; } }
+    const total = parseFloat(fin?.total || 0) || 0;
+    return Math.max(0, Math.round((total - retencionDe(o)) * 100) / 100);
+};
+
 export const esVentaACredito = (o) => {
     const esCredito = (v) => { const t = String(v || '').toLowerCase(); return t.includes('crédit') || t.includes('credit'); };
     const tieneFecha = (v) => String(v || '').trim() !== '';
@@ -72,7 +83,7 @@ export const rangoDelMes = (fechaBase) => {
 };
 
 export const resumenVentasMes = (orders, dateRange, margenDias, pertenece = () => true, ahora = new Date()) => {
-    const monto = (o) => parseFloat(o?.financials?.total || 0) || 0;
+    const monto = montoComision;
     let totalSales = 0, propias = 0, carrySales = 0, carryCount = 0, carryPendiente = 0, carryPendienteCount = 0;
     (orders || []).forEach(o => {
         if (!pertenece(o)) return;

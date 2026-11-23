@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '../supabaseClient';
 import { isUserInList } from '@/utils/userMatch';
 // Reglas de comisión (qué cuenta como "finalizada", ciclo extra del crédito): archivo compartido con la tarjeta del Inicio.
-import { finalizadaPropiaEnRango, creditoDelMesAnteriorEnRango } from '@/utils/comisiones';
+import { finalizadaPropiaEnRango, creditoDelMesAnteriorEnRango, montoComision } from '@/utils/comisiones';
 
 
 const StatisticsCharts = ({
@@ -182,7 +182,7 @@ const StatisticsCharts = ({
 
     // Ventas Totales y N° de Órdenes: según la fecha de CREACIÓN de la orden
     filteredOrders.forEach(order => {
-      const amount = parseFloat(order.financials?.total || 0);
+      const amount = montoComision(order);
       const idsDeEstaOrden = Array.isArray(order.vendedor_ids) && order.vendedor_ids.length > 0
           ? order.vendedor_ids
           : []; // si la orden no tiene ids (muy vieja, sin migrar), no se cuenta aquí
@@ -197,7 +197,7 @@ const StatisticsCharts = ({
     // Ventas Finalizadas: órdenes CREADAS en este período que además ya se
     // FINALIZARON (con el margen de 4 días para que alcancen a cerrarse).
     ordenesFinalizadasEnRango.forEach(order => {
-      const amount = parseFloat(order.financials?.total || 0);
+      const amount = montoComision(order);
       const idsDeEstaOrden = Array.isArray(order.vendedor_ids) && order.vendedor_ids.length > 0
           ? order.vendedor_ids
           : [];
@@ -352,6 +352,8 @@ const StatisticsCharts = ({
             </h3>
             {/* 🔧 NUEVO: explicación de qué significa % Efectividad, para que quede claro */}
             <p className="text-xs text-slate-500 mt-1.5 max-w-2xl">
+               <span className="font-semibold text-slate-600">Montos:</span> cada orden cuenta por su <span className="font-semibold">Total a Pagar</span> (Total Factura con descuento e IVA, menos la retención, que no llega a caja).
+               <br className="hidden md:block"/>
                <span className="font-semibold text-slate-600">% Efectividad</span> = (ventas de órdenes ya <span className="font-semibold">Finalizadas</span>) ÷ (ventas totales del vendedor en el rango seleccionado). 
                Las órdenes que todavía están en Ventas, Producción, Por Cobrar o Verificación cuentan en el total pero no como "finalizadas" porque aún no terminan su proceso — por eso este número sube solo, sin ninguna acción, a medida que las órdenes se van completando. No refleja un problema del vendedor.
                <br className="hidden md:block"/>

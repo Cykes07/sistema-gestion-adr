@@ -399,7 +399,7 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], orde
             precio_minimo: Number(item.precio_minimo) || 0,
             precioMinimoManual: item.es_por_metro ? minCatalogoItem : '',
             total: item.es_por_metro ? 0 : parseFloat((computedPrice * (minQty > 0 ? minQty : 1)).toFixed(2)),
-            componentes: componentesDelCatalogo(item)
+            componentes: componentesDelCatalogo(item), catalogo_id: item.id
         };
 
         if (emptyIndex !== -1) { 
@@ -458,7 +458,7 @@ const ProformaForm = ({ onSuccess, onCancel, clients = [], staffUsers = [], orde
               precio_minimo: Number(product.precio_minimo) || 0,
               precioMinimoManual: product.es_por_metro ? minCatalogoProduct : '',
               total: product.es_por_metro ? 0 : parseFloat(((minQty > 0 ? minQty : 1) * computedPrice).toFixed(2)),
-              componentes: componentesDelCatalogo(product)
+              componentes: componentesDelCatalogo(product), catalogo_id: product.id
           };
           if (index === newProducts.length - 1) newProducts.push({ cantidad: 1, descripcion: '', observaciones: '', precioUnitario: 0, total: 0, base: '', altura: '', venta_minima: 1, es_por_metro: false, precio_minimo: 0, precioMinimoManual: '' });
           return newProducts;

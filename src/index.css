@@ -11,6 +11,7 @@
   --tema-indigo-50: 238 242 255; --tema-indigo-100: 224 231 255; --tema-indigo-200: 199 210 254; --tema-indigo-300: 165 180 252;
   --tema-indigo-400: 129 140 248; --tema-indigo-500: 99 102 241; --tema-indigo-600: 79 70 229; --tema-indigo-700: 67 56 202;
   --tema-indigo-800: 55 48 163; --tema-indigo-900: 49 46 129; --tema-indigo-950: 30 27 75;
+  --tema-menu: 15 23 42;
 }
  
 @layer base {

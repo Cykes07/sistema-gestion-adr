@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { getValidSellers } from '@/lib/utils';
+import { quienCobroLaOrden } from '@/utils/movimientosDia';
 
 const getLocalDate = () => {
     const d = new Date();
@@ -654,7 +655,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
             precios_escalonados: item.precios_escalonados || [], precioDistribuidorBase: Number(item.precio_distribuidor) || 0,
             precios_distribuidor: item.precios_distribuidor || [], es_por_metro: item.es_por_metro || false,
             precio_minimo: Number(item.precio_minimo) || 0, precioMinimoManual: item.es_por_metro ? minP : '',
-            observaciones: item.observaciones || '', total: initialTotal, componentes: componentesDelCatalogo(item)
+            observaciones: item.observaciones || '', total: initialTotal, componentes: componentesDelCatalogo(item), catalogo_id: item.id
         };
 
         if (emptyIndex !== -1) {
@@ -700,7 +701,7 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
               venta_minima: minQty > 0 ? minQty : 1, cantidad: minQty > 0 ? minQty : 1, base: '', altura: '',
               es_por_metro: product.es_por_metro || false, precio_minimo: Number(product.precio_minimo) || 0,
               precioMinimoManual: product.es_por_metro ? minP : '', observaciones: product.observaciones || '', total: initialTotal,
-              componentes: componentesDelCatalogo(product)
+              componentes: componentesDelCatalogo(product), catalogo_id: product.id
           };
           if (index === newProducts.length - 1) newProducts.push({ descripcion: '', precioUnitario: '', cantidad: 1, base: '', altura: '', total: 0, venta_minima: 1, es_por_metro: false, precio_minimo: 0, precioMinimoManual: '', observaciones: '' });
           return { ...prev, productos: newProducts };
@@ -925,17 +926,21 @@ const OrderForm = ({ currentUser, clients = [], staffUsers = [], orders = [], on
       const excedente = Math.abs(financials.saldoPendiente);
       if (excedente <= 0) return;
 
-      const nuevoAbono = { 
-          monto: -excedente, 
+      // El dinero se devuelve de la caja de quien lo cobró (no de quien edita la orden, que a veces es el Admin).
+      const caja = quienCobroLaOrden(initialData || {}, abonos) || { nombre: currentUser.name, id: currentUser.id };
+      const nuevoAbono = {
+          id: Date.now(),
+          monto: -excedente,
           metodoPago: 'Efectivo',
-          fecha: `${getLocalDate()}T12:00:00`, 
-          nota: 'Devolución automática de efectivo por ajuste de Retención tardía', 
-          cobrador: currentUser.name,
-          cobrador_id: currentUser.id
+          fecha: `${getLocalDate()}T12:00:00`,
+          nota: 'Devolución automática de efectivo por ajuste de Retención tardía',
+          cobrador: caja.nombre || currentUser.name,
+          cobrador_id: caja.id || currentUser.id,
+          caja_confirmada: true
       };
-      
+
       setAbonos([...abonos, nuevoAbono]);
-      toast({ title: "Devolución Registrada", description: `Se ha generado un egreso de $${excedente.toFixed(2)} para cuadrar la retención.` });
+      toast({ title: "Devolución Registrada", description: `Se ha generado un egreso de $${excedente.toFixed(2)} en la caja de ${nuevoAbono.cobrador} para cuadrar la retención.` });
   };
 
   const handleCancelOrder = async () => {

@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { Calendar as CalendarIcon, Printer, Loader2, BookOpen, DollarSign, Building, TrendingDown, Filter, Users, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { momentoDelDia, momentoDelAbono, horaCorta, ordenarPorMomento, claseMetodo, claseNota } from '@/utils/movimientosDia';
+import { momentoDelDia, momentoDelAbono, horaCorta, ordenarPorMomento, claseMetodo, claseNota, responsableDeAbono } from '@/utils/movimientosDia';
 
 const FILTROS = ['TODOS', 'EFECTIVO', 'BANCOS / TRANSFERENCIAS', 'SOLO INGRESOS', 'SOLO EGRESOS'];
 
@@ -157,15 +157,18 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
       // ABONOS
       (o.abonos || []).forEach((abono, idx) => {
         if (toLocalDateStr(abono.fecha) === selectedDate) {
+          const responsable = responsableDeAbono(o, abono);
+          const monto = Number(abono.monto) || 0;
+          const esDevolucion = monto < 0;
           txs.push({
-            id: `abo-${oId}-${idx}`, 
-            tipo: 'ABONO',
+            id: `abo-${oId}-${idx}`,
+            tipo: esDevolucion ? 'DEVOLUCIÓN' : 'ABONO',
             cliente, titulo, orden: numOrden,
-            vendedor: abono.cobrador || 'Sistema',
-            vendedorId: abono.cobrador_id || null,
+            vendedor: responsable.nombre || 'Sistema',
+            vendedorId: responsable.id || null,
             metodo: abono.metodoPago || 'Efectivo',
-            ingreso: Number(abono.monto), egreso: 0,
-            nota: 'ABONO REGISTRADO',
+            ingreso: esDevolucion ? 0 : monto, egreso: esDevolucion ? -monto : 0,
+            nota: esDevolucion ? 'DEVOLUCIÓN' : 'ABONO REGISTRADO',
             momento: momentoDelAbono(abono),
             notaHora: 'El abono se registró otro día; no tiene hora de este día.'
           });
@@ -524,7 +527,7 @@ const GeneralLedgerPanel = ({ orders = [], staffUsers = [], user }) => {
                                               tx.tipo === 'ABONO' ? 'text-emerald-700' :
                                               tx.tipo === 'RETIRO' ? 'text-orange-700' :
                                               tx.tipo === 'CRÉDITO' ? 'text-amber-600' :
-                                              tx.tipo === 'ANULACIÓN' ? 'text-red-600' :
+                                              tx.tipo === 'ANULACIÓN' || tx.tipo === 'DEVOLUCIÓN' ? 'text-red-600' :
                                               'text-purple-700'
                                           )}>
                                               {tx.tipo}

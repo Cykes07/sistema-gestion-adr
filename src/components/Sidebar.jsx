@@ -27,26 +27,26 @@ const MenuItem = ({ item, isActive, currentView, onClick, onSubItemClick }) => {
         <a
           href={`#view=${item.id}`}
           onClick={(e) => { e.preventDefault(); handleClick(); }}
-          className={cn("w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-all duration-200 group relative cursor-pointer", isActive ? "text-blue-400 bg-slate-800 border-l-4 border-blue-500" : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 hover:pl-5 border-l-4 border-transparent")}
+          className={cn("w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-all duration-200 group relative cursor-pointer", isActive ? "text-white bg-white/10 border-l-4 border-blue-400" : "text-white/60 hover:text-white hover:bg-white/5 hover:pl-5 border-l-4 border-transparent")}
         >
-          <div className="flex items-center gap-3"><Icon className={cn("h-5 w-5", isActive ? "text-blue-400" : "text-slate-500 group-hover:text-slate-300")} /><span>{item.label}</span></div>
+          <div className="flex items-center gap-3"><Icon className={cn("h-5 w-5", isActive ? "text-blue-300" : "text-white/40 group-hover:text-white/80")} /><span>{item.label}</span></div>
         </a>
       ) : (
-        <button onClick={handleClick} className={cn("w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-all duration-200 group relative", isActive ? "text-blue-400 bg-slate-800 border-l-4 border-blue-500" : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 hover:pl-5 border-l-4 border-transparent")}>
-          <div className="flex items-center gap-3"><Icon className={cn("h-5 w-5", isActive ? "text-blue-400" : "text-slate-500 group-hover:text-slate-300")} /><span>{item.label}</span></div>
-          {hasSubmenu && <div className="text-slate-600">{isSubmenuOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</div>}
+        <button onClick={handleClick} className={cn("w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-all duration-200 group relative", isActive ? "text-white bg-white/10 border-l-4 border-blue-400" : "text-white/60 hover:text-white hover:bg-white/5 hover:pl-5 border-l-4 border-transparent")}>
+          <div className="flex items-center gap-3"><Icon className={cn("h-5 w-5", isActive ? "text-blue-300" : "text-white/40 group-hover:text-white/80")} /><span>{item.label}</span></div>
+          {hasSubmenu && <div className="text-white/40">{isSubmenuOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</div>}
         </button>
       )}
 
       <AnimatePresence>
         {hasSubmenu && isSubmenuOpen && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden bg-slate-900/50">
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden bg-black/20">
             {item.submenu.map((subItem, idx) => (
                 <a
                     key={idx}
                     href={`#view=${subItem.id}`}
                     onClick={(e) => { e.preventDefault(); onSubItemClick(subItem.id); }}
-                    className={cn("block w-full text-left pl-12 pr-4 py-2 text-xs transition-colors border-l-2 cursor-pointer", currentView === subItem.id ? "text-blue-400 border-blue-500 bg-slate-800/30" : "text-slate-500 border-transparent hover:text-slate-300 hover:bg-slate-800")}
+                    className={cn("block w-full text-left pl-12 pr-4 py-2 text-xs transition-colors border-l-2 cursor-pointer", currentView === subItem.id ? "text-white border-blue-400 bg-white/10" : "text-white/50 border-transparent hover:text-white/90 hover:bg-white/5")}
                 >
                   {subItem.label}
                 </a>
@@ -165,17 +165,17 @@ const Sidebar = ({ user, onLogout, currentView, onViewChange, allowedViews = [] 
   }).filter(Boolean);
 
   return (
-    <div className="w-64 bg-slate-900 h-screen flex flex-col shadow-2xl border-r border-slate-800 fixed left-0 top-0 z-40 overflow-y-auto print:hidden">
-      <div className="p-6 border-b border-slate-800">
-        {/* 🔧 Logo de la empresa (Configuración de la Empresa) */}
-        <div className="bg-white rounded-lg px-3 py-2 mb-4 h-14 flex items-center justify-center">
-          <img src={empresa.logo} alt={empresa.nombre} className="max-h-full max-w-full object-contain" />
-        </div>
+    <div className="w-64 h-screen flex flex-col shadow-2xl border-r border-black/20 fixed left-0 top-0 z-40 overflow-y-auto print:hidden" style={{ backgroundColor: 'rgb(var(--tema-menu))' }}>
+      {/* Logo de la empresa sobre una franja blanca de lado a lado (Configuración de la Empresa) */}
+      <div className="bg-white h-20 px-6 py-3 flex items-center justify-center shrink-0">
+        <img src={empresa.logo} alt={empresa.nombre} className="max-h-full max-w-full object-contain" />
+      </div>
+      <div className="px-6 py-5 border-b border-white/10">
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-bold text-white truncate">{user?.name}</h2>
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse"></span>
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{user?.role}</span>
+            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">{user?.role}</span>
           </div>
         </div>
       </div>
@@ -191,7 +191,7 @@ const Sidebar = ({ user, onLogout, currentView, onViewChange, allowedViews = [] 
           />
         ))}
       </div>
-      <div className="p-4 border-t border-slate-800 text-[10px] text-slate-600 text-center">Sistema v2.1 - Inventario Roles</div>
+      <div className="p-4 border-t border-white/10 text-[10px] text-white/40 text-center">Sistema v2.1 - Inventario Roles</div>
     </div>
   );
 };

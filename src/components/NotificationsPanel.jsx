@@ -504,7 +504,7 @@ const NotificationsPanel = ({
         const { data: valesData } = await supabase.from('vales_caja').select('*').order('fecha', { ascending: false }).limit(300);
         setTodosLosVales(valesData || []);
 
-        const { data: comprasData } = await supabase.from('historial_inventario').select('*').eq('tipo', 'INGRESO').order('created_at', { ascending: false }).limit(50);
+        const { data: comprasData } = await supabase.from('historial_inventario').select('*').eq('tipo', 'INGRESO').order('created_at', { ascending: false }).limit(100);
         setComprasRecientes(comprasData || []);
 
         const { data: cuadresData } = await supabase.from('historial_inventario').select('*').like('motivo', 'Cuadre de Inventario:%').order('created_at', { ascending: false }).limit(50);
@@ -624,7 +624,8 @@ const NotificationsPanel = ({
   // Admin (porque a ellos les escondimos el campo de Factura/Proveedor),
   // todavía sin costear.
   const tareasRecepcion = useMemo(() => {
-      const pendientes = comprasRecientes.filter(c => !c.revisado && !(c.motivo || '').includes('Fac/Ref:'));
+      // Las reversiones de Producción son material que vuelve del taller, no una compra: quedan solo en el historial.
+      const pendientes = comprasRecientes.filter(c => !c.revisado && !(c.motivo || '').includes('Fac/Ref:') && !(c.motivo || '').startsWith('Reversión de Producción'));
       return agruparPorSesion(pendientes);
   }, [comprasRecientes]);
 

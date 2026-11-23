@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { isUserInList } from '@/utils/userMatch';
-import { momentoDelDia, momentoDelAbono, horaCorta, ordenarPorMomento, claseMetodo, claseNota } from '@/utils/movimientosDia';
+import { momentoDelDia, momentoDelAbono, horaCorta, ordenarPorMomento, claseMetodo, claseNota, responsableDeAbono } from '@/utils/movimientosDia';
 
 // 🔥 BÚSQUEDA INTELIGENTE DE NOMBRES 🔥
 const normalizeName = (name) => {
@@ -333,12 +333,15 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
           }
       }
       
-      (o.abonos || []).forEach(abono => {
+      (o.abonos || []).forEach((abono, abonoIndex) => {
           const abonoDateStr = toLocalDateStr(abono.fecha);
-          if (abonoDateStr === selectedDate && isUserMatch(abono.cobrador, targetUserName, abono.cobrador_id, targetUserId)) {
+          const responsable = responsableDeAbono(o, abono);
+          if (abonoDateStr === selectedDate && isUserMatch(responsable.nombre, targetUserName, responsable.id, targetUserId)) {
                const numOrden = o.order_number || o.orderNumber || o.id;
+               const monto = Number(abono.monto) || 0;
+               const esDevolucion = monto < 0;
                txs.push({
-                  id: `abono-${abono.id}`, type: 'ABONO', description: clienteDe(o), details: tituloDe(o), orderNumber: numOrden, income: Number(abono.monto), expense: 0, balanceNote: 'ABONO REGISTRADO', momento: momentoDelAbono(abono), isManual: false, isAnulada: false, originalOrder: o, abonoId: abono.id, paymentMethod: abono.metodoPago || abono.metodo_pago || abono.forma_pago || abono.formaPago || 'EFECTIVO' 
+                  id: `abono-${o.id}-${abonoIndex}`, type: esDevolucion ? 'DEVOLUCIÓN' : 'ABONO', description: clienteDe(o), details: tituloDe(o), orderNumber: numOrden, income: esDevolucion ? 0 : monto, expense: esDevolucion ? -monto : 0, balanceNote: esDevolucion ? 'DEVOLUCIÓN' : 'ABONO REGISTRADO', momento: momentoDelAbono(abono), isManual: false, isAnulada: false, originalOrder: o, abonoId: abono.id, abonoIndex, paymentMethod: abono.metodoPago || abono.metodo_pago || abono.forma_pago || abono.formaPago || 'EFECTIVO'
                });
           }
       });
@@ -490,13 +493,15 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
           }).eq('id', orderId);
           if (error) throw error;
 
-      } else if (tx.type === 'ABONO') {
+      } else if (tx.type === 'ABONO' || tx.type === 'DEVOLUCIÓN') {
           // Traemos los abonos frescos para no pisar cambios de otra persona
           const { data: dbOrder, error: fetchError } = await supabase.from('ordenes').select('abonos').eq('id', orderId).single();
           if (fetchError) throw fetchError;
 
-          const abonosActualizados = (dbOrder.abonos || []).map(a =>
-              a.id === tx.abonoId ? { ...a, cobrador: newUser.full_name, cobrador_id: newUser.id } : a
+          // Los abonos viejos sin id se ubican por su posición en la lista.
+          const esEste = (a, i) => (tx.abonoId !== undefined && tx.abonoId !== null ? a.id === tx.abonoId : i === tx.abonoIndex);
+          const abonosActualizados = (dbOrder.abonos || []).map((a, i) =>
+              esEste(a, i) ? { ...a, cobrador: newUser.full_name, cobrador_id: newUser.id, ...(Number(a.monto) < 0 ? { caja_confirmada: true } : {}) } : a
           );
 
           const { error } = await supabase.from('ordenes').update({ abonos: abonosActualizados }).eq('id', orderId);
@@ -625,7 +630,7 @@ const DailyReport = ({ orders = [], user, onViewOrder, onDataChanged }) => {
                         <tbody className="divide-y divide-slate-100">
                         {visibleTransactions.map((tx, idx) => {
                             const isEfectivo = formatPaymentMethod(tx.paymentMethod) === 'EFECTIVO';
-                            const tipoColor = tx.isAnulada ? 'text-red-600' : tx.isVale ? 'text-red-700' : tx.type === 'VENTA' ? 'text-blue-700' : tx.type === 'ABONO' ? 'text-emerald-700' : tx.type === 'RETIRO' ? 'text-orange-700' : tx.type === 'CRÉDITO' ? 'text-amber-600' : 'text-purple-700';
+                            const tipoColor = tx.isAnulada ? 'text-red-600' : tx.isVale ? 'text-red-700' : tx.type === 'DEVOLUCIÓN' ? 'text-red-600' : tx.type === 'VENTA' ? 'text-blue-700' : tx.type === 'ABONO' ? 'text-emerald-700' : tx.type === 'RETIRO' ? 'text-orange-700' : tx.type === 'CRÉDITO' ? 'text-amber-600' : 'text-purple-700';
                             
                             return (
                             <tr 

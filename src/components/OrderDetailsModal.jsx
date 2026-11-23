@@ -16,6 +16,8 @@ import ClientExpedienteModal from './ClientExpedienteModal';
 import { medidaDelProducto, quitarMedidaDelTexto, referenciaCatalogo } from '@/utils/preciosProducto';
 import MedidaProducto from './MedidaProducto';
 import DiferenciaPrecio from './DiferenciaPrecio';
+import TarifasVolumen from './TarifasVolumen';
+import ProductoCatalogoModal, { puedeEditarCatalogo } from './ProductoCatalogoModal';
 import { historialDelCredito, fechaCorta } from '@/utils/historialCredito'; // 🔧 historial del crédito (23-oct)
 
 // 🔧 CAMBIO 10 (Fase 1+2): sin 'CONTABILIDAD'. 'VERIFICACIÓN' se inserta
@@ -163,6 +165,17 @@ const getPrintDescParts = (prod) => {
     };
 };
 
+// La línea de la orden guarda una copia del producto; para llegar al catálogo se usa catalogo_id (órdenes nuevas)
+// o el nombre (lo que va antes del " - ").
+const nombreCatalogoDe = (prod) => String(getPrintDescParts(prod).nombre || '').trim();
+const conTarifasDelCatalogo = (prod, cat) => ({
+    ...prod,
+    precioBaseOriginal: Number(cat.precio) || 0,
+    precios_escalonados: cat.precios_escalonados || [],
+    precioDistribuidorBase: Number(cat.precio_distribuidor) || 0,
+    precios_distribuidor: cat.precios_distribuidor || [],
+});
+
 const InlineComprobante = ({ items = [], onClickImage }) => {
     if (!items || items.length === 0) return null;
     return (
@@ -176,7 +189,7 @@ const InlineComprobante = ({ items = [], onClickImage }) => {
     );
 };
 
-const ProductProductionRow = ({ product, index, order, user, onProductUpdate, conMedidas = false, mayorista = false }) => {
+const ProductProductionRow = ({ product, index, order, user, onProductUpdate, conMedidas = false, mayorista = false, catalogo = null, onEditarCatalogo = null }) => {
     const { toast } = useToast();
     const isProduction = user?.role === 'Producción' || user?.role === 'Administrador';
     // 🔧 NUEVO: Producción puede revertir sus propios productos finalizados mientras la orden siga
@@ -302,7 +315,7 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                             cantidad_cambio: qtyToRestore,
                             cantidad_resultante: newQty,
                             tipo: 'INGRESO',
-                            motivo: `Reversión de Producción (Admin) - Orden #${orderRef}`,
+                            motivo: `Reversión de Producción - Orden #${orderRef}`,
                             usuario: user?.name || 'Administrador'
                         }]);
                     }
@@ -409,7 +422,15 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                     const { nombre, detalle } = getPrintDescParts(product);
                     return (
                         <>
-                            <div className="font-bold text-slate-900">{nombre}</div>
+                            <div className="font-bold text-slate-900 flex items-start gap-1.5">
+                                <span>{nombre}</span>
+                                {onEditarCatalogo && catalogo && (
+                                    <button type="button" onClick={() => onEditarCatalogo(catalogo)} title="Editar este producto en el catálogo" aria-label="Editar producto del catálogo"
+                                        className="shrink-0 -mt-0.5 p-1 rounded text-purple-500 hover:text-purple-700 hover:bg-purple-50">
+                                        <Edit2 className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </div>
                             {detalle && <div className="font-normal normal-case text-xs text-slate-500 mt-1">{detalle}</div>}
                             {/* 🔧 NUEVO: la Nota Técnica (observaciones internas) nunca se
                                 mostraba en esta vista — solo salía descripción. */}
@@ -442,7 +463,10 @@ const ProductProductionRow = ({ product, index, order, user, onProductUpdate, co
                                  {product.es_por_metro ? formatCurrency(product.precioUnitario || product.precio) : ''}
                              </td>
                          )}
-                         <td className="px-4 py-4 text-center text-slate-600 font-bold align-top">{product.cantidad}</td>
+                         <td className="px-4 py-4 text-center text-slate-600 font-bold align-top">
+                             {product.cantidad}
+                             {showFinancials && <TarifasVolumen item={catalogo ? conTarifasDelCatalogo(product, catalogo) : product} mayorista={mayorista} />}
+                         </td>
                          {showFinancials && <td className="px-4 py-4 text-right font-bold text-slate-800 align-top">{formatCurrency(cantidad > 0 ? total / cantidad : total)}</td>}
                          {showFinancials && (
                              <td className="px-4 py-4 text-right font-bold text-slate-900 align-top">
@@ -632,6 +656,38 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
   const isArchived = order?.status === 'ARCHIVADA';
 
   const canActuallyEdit = canEdit || isAdmin;
+
+  // Productos del catálogo de esta orden: para el botón "Editar producto" y las tarifas actuales en el desglose.
+  const puedeEditarProductos = puedeEditarCatalogo(user);
+  const [catalogoOrden, setCatalogoOrden] = useState({ ordenId: null, porId: {}, porNombre: {} });
+  const [productoCatalogoEditando, setProductoCatalogoEditando] = useState(null);
+  const cargarCatalogoOrden = async (ord) => {
+      if (!ord?.id) return;
+      const lineas = (ord.productos || []).filter(p => p?.descripcion);
+      const ids = [...new Set(lineas.map(p => p.catalogo_id).filter(Boolean))];
+      const nombres = [...new Set(lineas.flatMap(p => { const n = nombreCatalogoDe(p); return n ? [n, n.toUpperCase()] : []; }))];
+      const porId = {}, porNombre = {};
+      try {
+          const consultas = [];
+          if (ids.length) consultas.push(supabase.from('catalogo_productos').select('*').in('id', ids));
+          if (nombres.length) consultas.push(supabase.from('catalogo_productos').select('*').in('nombre', nombres));
+          const respuestas = await Promise.all(consultas);
+          respuestas.forEach(r => (r.data || []).forEach(c => {
+              porId[c.id] = c;
+              const clave = String(c.nombre || '').trim().toUpperCase();
+              if (!porNombre[clave]) porNombre[clave] = c;
+          }));
+      } catch (e) { /* sin catálogo: el desglose se ve como antes */ }
+      setCatalogoOrden({ ordenId: ord.id, porId, porNombre });
+  };
+  useEffect(() => {
+      if (order?.id && (showFinancials || puedeEditarProductos)) cargarCatalogoOrden(order);
+  }, [order?.id]);
+  const catalogoDeLinea = (prod) => {
+      if (!order || catalogoOrden.ordenId !== order.id) return null;
+      // Primero por nombre (si el vendedor reescribió la línea, el id viejo ya no corresponde); el id cubre productos renombrados.
+      return catalogoOrden.porNombre[nombreCatalogoDe(prod).toUpperCase()] || (prod?.catalogo_id && catalogoOrden.porId[prod.catalogo_id]) || null;
+  };
 
   useEffect(() => {
     if (order) {
@@ -1172,7 +1228,7 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                                     <th className="px-4 py-3 text-left font-bold">Item a Producir</th>
                                     {hayMedidas && <th className="px-4 py-3 text-center font-bold w-32">Medida</th>}
                                     {hayMedidas && showFinancials && <th className="px-4 py-3 text-right font-bold w-28">P. Base ($/m²)</th>}
-                                    <th className="px-4 py-3 text-center font-bold w-16">Cant.</th>
+                                    <th className={`px-4 py-3 text-center font-bold ${showFinancials ? 'w-32' : 'w-16'}`}>Cant.</th>
                                     {showFinancials && <th className="px-4 py-3 text-right font-bold w-28">P. Unitario</th>}
                                     {showFinancials && <th className="px-4 py-3 text-right font-bold w-28">Total</th>}
                                     <th className="px-4 py-3 text-left font-bold w-[300px]">Estado / Inventario</th>
@@ -1180,7 +1236,8 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                             </thead>
                             <tbody className="divide-y divide-slate-200 bg-white">
                                 {productosOrden.map((prod, idx) => (
-                                    <ProductProductionRow key={`${order.id}-${idx}`} product={prod} index={idx} order={order} user={user} onProductUpdate={handleProductUpdateLocal} conMedidas={hayMedidas} mayorista={clienteMayorista} />
+                                    <ProductProductionRow key={`${order.id}-${idx}`} product={prod} index={idx} order={order} user={user} onProductUpdate={handleProductUpdateLocal} conMedidas={hayMedidas} mayorista={clienteMayorista}
+                                        catalogo={catalogoDeLinea(prod)} onEditarCatalogo={puedeEditarProductos ? setProductoCatalogoEditando : null} />
                                 ))}
                                 {(!productosOrden || productosOrden.length === 0) && (<tr><td colSpan={(showFinancials ? 6 : 4) + (hayMedidas ? (showFinancials ? 2 : 1) : 0)} className="px-4 py-8 text-center text-slate-400 italic">No hay productos registrados</td></tr>)}
                             </tbody>
@@ -1593,6 +1650,16 @@ const OrderDetailsModal = ({ order, user, staffUsers = [], clients = [], orders 
                 );
             })()}
         </div>
+
+        {productoCatalogoEditando && (
+            <ProductoCatalogoModal
+                key={productoCatalogoEditando.id}
+                item={productoCatalogoEditando}
+                capa="z-[80]"
+                onClose={() => setProductoCatalogoEditando(null)}
+                onSaved={() => { setProductoCatalogoEditando(null); cargarCatalogoOrden(order); }}
+            />
+        )}
 
         {/* 🔥 CONTENEDOR INVISIBLE DE IMPRESIÓN 🔥 */}
         <div id="modal-print-container" className="hidden print:block absolute top-0 left-0 w-full bg-white z-[10000] text-black" style={{ minHeight: '100vh', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>

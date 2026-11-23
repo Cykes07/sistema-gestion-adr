@@ -4,15 +4,41 @@
 import { useSyncExternalStore } from 'react';
 import { supabase } from '../supabaseClient';
 
-export const EMPRESA_POR_DEFECTO = {
+// Cada instalación (ADR, Carvajal, Demo...) se compila con su propio archivo .env.<instancia> en el VPS.
+// VITE_INSTANCIA: 'adr' (o vacío) = la imprenta ADR con sus datos de siempre; cualquier otra arranca en blanco.
+// VITE_PLAN_MODULOS: módulos contratados ('todos', 'ninguno' o 'inventario,comisiones'). Vacío = todos.
+// Los define ADR Print System en el VPS: el Administrador de cada empresa NO puede encender un módulo fuera de su plan.
+const INSTANCIA = String(import.meta.env.VITE_INSTANCIA || 'adr').trim().toLowerCase();
+export const esInstanciaADR = INSTANCIA === 'adr';
+const PLAN_MODULOS = String(import.meta.env.VITE_PLAN_MODULOS || '').trim().toLowerCase();
+export const moduloEnPlan = (id) => !PLAN_MODULOS || PLAN_MODULOS === 'todos' || PLAN_MODULOS.split(',').map(s => s.trim()).includes(id);
+
+const DATOS_ADR = {
     nombre: 'ADRCOMPANY SAS',
     ruc: '0993397285001',
     direccion: 'Av. Zenón Macías 306 y calle La Merced, General Villamil (Playas), Guayas, Ecuador',
     telefono: '098 265 7066 - 099 076 1566',
     correo: 'imprenta_milena@hotmail.com',
     redes: '@graficasadr',
-    pieDocumentos: '',
     logo: '/logo.png',
+    dominioUsuario: '@graficasadr.com',
+};
+const DATOS_EN_BLANCO = { nombre: 'Mi Empresa', ruc: '', direccion: '', telefono: '', correo: '', redes: '', logo: '', dominioUsuario: '' };
+
+// Mientras una empresa nueva no suba su logo, se muestra su nombre como logo (nunca el de ADR).
+const MARCA_LOGO_TEXTO = 'data-logo-texto';
+export const esLogoDeTexto = (v) => String(v || '').includes(encodeURIComponent(MARCA_LOGO_TEXTO));
+const logoDeTexto = (nombre) => {
+    const texto = String(nombre || 'Mi Empresa').trim().slice(0, 40).replace(/[<>&"]/g, '');
+    const tam = texto.length > 22 ? 34 : texto.length > 14 ? 44 : 56;
+    const svg = `<svg ${MARCA_LOGO_TEXTO}="1" xmlns="http://www.w3.org/2000/svg" width="600" height="160" viewBox="0 0 600 160">`
+        + `<text x="300" y="80" text-anchor="middle" dominant-baseline="central" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="${tam}" fill="#1e293b">${texto}</text></svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+};
+
+export const EMPRESA_POR_DEFECTO = {
+    ...(esInstanciaADR ? DATOS_ADR : DATOS_EN_BLANCO),
+    pieDocumentos: '',
     favicon: '',
     color: 'azul',
     moneda: 'USD',
@@ -21,6 +47,7 @@ export const EMPRESA_POR_DEFECTO = {
     intervaloEntrega: '30',
     moduloInventario: 'si',
     moduloComisiones: 'si',
+    loginFondo: '',
 };
 
 // Módulos que el Administrador puede apagar (Configuración de la Empresa → Módulos del Sistema). Apagado = sus pantallas
@@ -40,7 +67,7 @@ export const MODULOS = [
 
 export const moduloActivo = (id, emp = actual) => {
     const m = MODULOS.find(x => x.id === id);
-    return !m || emp[m.campo] !== 'no';
+    return !m || (moduloEnPlan(m.id) && emp[m.campo] !== 'no');
 };
 export const vistaDisponible = (vista, emp = actual) => !MODULOS.some(m => m.vistas.includes(vista) && !moduloActivo(m.id, emp));
 export const useModulo = (id) => moduloActivo(id, useEmpresa());
@@ -72,13 +99,14 @@ const P = {
     orange: ['#fff7ed', '#ffedd5', '#fed7aa', '#fdba74', '#fb923c', '#f97316', '#ea580c', '#c2410c', '#9a3412', '#7c2d12', '#431407'],
     amber: ['#fffbeb', '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24', '#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f', '#451a03'],
 };
+// `menu` = fondo del menú lateral y del panel izquierdo del inicio de sesión (el tono oscuro del color elegido).
 export const TEMAS = [
-    { id: 'azul', nombre: 'Azul (original)', principal: P.blue, acento: P.indigo },
-    { id: 'rojo', nombre: 'Rojo', principal: P.red, acento: P.rose },
-    { id: 'verde', nombre: 'Verde', principal: P.green, acento: P.emerald },
-    { id: 'negro', nombre: 'Negro', principal: P.negro, acento: P.negro },
-    { id: 'morado', nombre: 'Morado', principal: P.purple, acento: P.violet },
-    { id: 'naranja', nombre: 'Naranja', principal: P.orange, acento: P.amber },
+    { id: 'azul', nombre: 'Azul (original)', principal: P.blue, acento: P.indigo, menu: '#0f172a' },
+    { id: 'rojo', nombre: 'Rojo', principal: P.red, acento: P.rose, menu: '#5b1010' },
+    { id: 'verde', nombre: 'Verde', principal: P.green, acento: P.emerald, menu: '#0a3a22' },
+    { id: 'negro', nombre: 'Negro', principal: P.negro, acento: P.negro, menu: '#111113' },
+    { id: 'morado', nombre: 'Morado', principal: P.purple, acento: P.violet, menu: '#36105c' },
+    { id: 'naranja', nombre: 'Naranja', principal: P.orange, acento: P.amber, menu: '#5a2108' },
 ];
 const TONOS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 
@@ -104,9 +132,10 @@ export const aplicarTema = (colorId) => {
     const tema = TEMAS.find(t => t.id === colorId);
     if (!tema || tema.id === 'azul') {
         TONOS.forEach(t => { raiz.removeProperty(`--tema-blue-${t}`); raiz.removeProperty(`--tema-indigo-${t}`); });
-        raiz.removeProperty('--primary'); raiz.removeProperty('--ring');
+        raiz.removeProperty('--primary'); raiz.removeProperty('--ring'); raiz.removeProperty('--tema-menu');
         return;
     }
+    raiz.setProperty('--tema-menu', hexATriplete(tema.menu));
     TONOS.forEach((t, i) => {
         raiz.setProperty(`--tema-blue-${t}`, hexATriplete(tema.principal[i]));
         raiz.setProperty(`--tema-indigo-${t}`, hexATriplete(tema.acento[i]));
@@ -126,16 +155,24 @@ const aplicarPestana = (emp) => {
     }
 };
 
+// Texto guía que se muestra junto al usuario en el inicio de sesión ("@empresa.com"). Solo se muestra: el acceso real
+// sigue usando el dominio interno con el que se crearon las cuentas (ver Login.jsx / UserManagement.jsx).
+export const normalizarDominio = (d) => {
+    const limpio = String(d || '').trim().replace(/\s+/g, '').replace(/^@+/, '');
+    return limpio ? `@${limpio}` : '';
+};
+
 // Une lo guardado con los valores por defecto: un campo vacío del logo/nombre vuelve al de ADR.
 export const completarEmpresa = (guardado) => {
     const g = guardado && typeof guardado === 'object' ? guardado : {};
     const out = { ...EMPRESA_POR_DEFECTO };
     Object.keys(EMPRESA_POR_DEFECTO).forEach(k => { if (g[k] !== undefined && g[k] !== null) out[k] = typeof g[k] === 'string' ? g[k] : out[k]; });
-    if (!out.logo) out.logo = EMPRESA_POR_DEFECTO.logo;
     if (!out.nombre.trim()) out.nombre = EMPRESA_POR_DEFECTO.nombre;
+    if (!out.logo || esLogoDeTexto(out.logo)) out.logo = EMPRESA_POR_DEFECTO.logo || logoDeTexto(out.nombre);
     if (!MONEDAS.some(m => m.codigo === out.moneda)) out.moneda = 'USD';
     if (!INTERVALOS_ENTREGA.includes(out.intervaloEntrega)) out.intervaloEntrega = EMPRESA_POR_DEFECTO.intervaloEntrega;
     MODULOS.forEach(m => { if (out[m.campo] !== 'no') out[m.campo] = 'si'; });
+    out.dominioUsuario = normalizarDominio(out.dominioUsuario);
     if (!horaValida(out.horaInicioEntrega) || !horaValida(out.horaFinEntrega) || out.horaFinEntrega <= out.horaInicioEntrega) {
         out.horaInicioEntrega = EMPRESA_POR_DEFECTO.horaInicioEntrega;
         out.horaFinEntrega = EMPRESA_POR_DEFECTO.horaFinEntrega;
@@ -187,6 +224,7 @@ export const previsualizarEmpresa = (borrador) => publicar(completarEmpresa(borr
 export const guardarEmpresa = async (datos, ivaPorcentaje) => {
     const limpio = {};
     Object.keys(EMPRESA_POR_DEFECTO).forEach(k => { limpio[k] = typeof datos[k] === 'string' ? datos[k].trim() : EMPRESA_POR_DEFECTO[k]; });
+    if (esLogoDeTexto(limpio.logo)) limpio.logo = '';
     const cambios = { empresa: limpio };
     if (ivaPorcentaje !== undefined && ivaPorcentaje !== '' && !Number.isNaN(Number(ivaPorcentaje))) cambios.iva_porcentaje = Number(ivaPorcentaje);
     const { data, error } = await supabase.from('configuracion_global').update(cambios).eq('id', 1).select('id');
@@ -201,7 +239,7 @@ export const guardarEmpresa = async (datos, ivaPorcentaje) => {
 };
 
 // Achica la imagen en el navegador antes de guardarla (se guarda como texto dentro de la configuración).
-export const imagenADataUrl = (archivo, anchoMax, altoMax) => new Promise((resolve, reject) => {
+export const imagenADataUrl = (archivo, anchoMax, altoMax, formato = 'image/png') => new Promise((resolve, reject) => {
     if (!archivo || !String(archivo.type).startsWith('image/')) { reject(new Error('El archivo no es una imagen.')); return; }
     const lector = new FileReader();
     lector.onerror = () => reject(new Error('No se pudo leer la imagen.'));
@@ -214,7 +252,7 @@ export const imagenADataUrl = (archivo, anchoMax, altoMax) => new Promise((resol
             lienzo.width = Math.max(1, Math.round(img.width * escala));
             lienzo.height = Math.max(1, Math.round(img.height * escala));
             lienzo.getContext('2d').drawImage(img, 0, 0, lienzo.width, lienzo.height);
-            resolve(lienzo.toDataURL('image/png'));
+            resolve(formato === 'image/jpeg' ? lienzo.toDataURL('image/jpeg', 0.82) : lienzo.toDataURL('image/png'));
         };
         img.src = lector.result;
     };

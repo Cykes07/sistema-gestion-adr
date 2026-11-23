@@ -95,6 +95,9 @@ const todosPagosVerificados = (order) => {
 // 🔧 CAMBIO 10.1: estado 'POR COBRAR'. Una orden con saldo pendiente (crédito vigente,
 // crédito vencido = impaga, o sin cobrar) NO se puede finalizar: al cerrarla queda en
 // 'POR COBRAR' hasta que el saldo llegue a 0. MISMA lógica en App.jsx y OrderDetailsModal.jsx.
+const CLAVE_DIA_SESION = 'sesionDelDia';
+const diaDeHoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
 const saldoPendienteOrden = (order) => {
     if (!order) return 0;
     let fin = order.financials || {};
@@ -313,7 +316,15 @@ function App() {
 
   useEffect(() => {
     let loadedUser = null;
-    const savedUser = localStorage.getItem('currentUser');
+    let savedUser = localStorage.getItem('currentUser');
+    // La sesión dura solo el día en que se inició: al prender la PC al día siguiente pide usuario y contraseña.
+    if (savedUser && localStorage.getItem(CLAVE_DIA_SESION) !== diaDeHoy()) {
+        supabase.auth.signOut().catch(() => {});
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem(CLAVE_DIA_SESION);
+        sessionStorage.removeItem('currentView');
+        savedUser = null;
+    }
     if (savedUser) {
         loadedUser = JSON.parse(savedUser);
         setUser(loadedUser);
@@ -491,8 +502,20 @@ function App() {
     try { const { data } = await supabase.from('role_permissions').select('allowed_views').eq('role', role).single(); if (data) setAllowedViews(data.allowed_views || []); } catch (error) { console.error(error); }
   };
 
-  const handleLogin = (userData) => { setUser(userData); localStorage.setItem('currentUser', JSON.stringify(userData)); setCurrentView('inicio'); sessionStorage.setItem('currentView', 'inicio'); fetchUserPermissions(userData.role); fetchAllData(userData); };
-  const handleLogout = () => { setUser(null); setAllowedViews([]); localStorage.removeItem('currentUser'); sessionStorage.removeItem('currentView'); };
+  const handleLogin = (userData) => { setUser(userData); localStorage.setItem('currentUser', JSON.stringify(userData)); localStorage.setItem(CLAVE_DIA_SESION, diaDeHoy()); setCurrentView('inicio'); sessionStorage.setItem('currentView', 'inicio'); fetchUserPermissions(userData.role); fetchAllData(userData); };
+  const handleLogout = () => { setUser(null); setAllowedViews([]); localStorage.removeItem('currentUser'); localStorage.removeItem(CLAVE_DIA_SESION); sessionStorage.removeItem('currentView'); supabase.auth.signOut().catch(() => {}); };
+
+  // Si la PC quedó suspendida y se vuelve al sistema otro día, también se pide iniciar sesión.
+  useEffect(() => {
+    if (!user) return;
+    const revisarDia = () => {
+      if (document.visibilityState !== 'visible' || localStorage.getItem(CLAVE_DIA_SESION) === diaDeHoy()) return;
+      handleLogout();
+      toast({ title: 'Sesión cerrada', description: 'La sesión dura solo el día. Vuelve a iniciar sesión.' });
+    };
+    document.addEventListener('visibilitychange', revisarDia);
+    return () => document.removeEventListener('visibilitychange', revisarDia);
+  }, [user]);
 
   const handleOrderSuccess = async () => {
     if (proformaToConvertId) {
@@ -542,7 +565,7 @@ function App() {
       const prefilledOrderData = {
           cliente_id: clienteEncontrado ? clienteEncontrado.id : null,
           cliente_nombre: proforma.cliente_nombre, cliente: proforma.cliente_nombre, ruc: proforma.cliente_identificacion,
-          productos: (proforma.items || []).map(item => ({ cantidad: item.cantidad, descripcion: item.descripcion, observaciones: item.observaciones, precio: item.precioUnitario, total: item.total, componentes: item.componentes || [] })),
+          productos: (proforma.items || []).map(item => ({ cantidad: item.cantidad, descripcion: item.descripcion, observaciones: item.observaciones, precio: item.precioUnitario, total: item.total, componentes: item.componentes || [], ...(item.catalogo_id ? { catalogo_id: item.catalogo_id } : {}) })),
           financials: { subtotal: proforma.subtotal, iva: proforma.iva, total: proforma.total, ivaPercentage: proforma.iva_percentage || 15, saldo: proforma.total, diasEntrega: proforma.dias_entrega || finData.diasEntrega || 0, descuentoMonto: savedDescuentoMonto },
           descuentoMonto: savedDescuentoMonto,
           dias_entrega: proforma.dias_entrega || finData.diasEntrega || 0,
@@ -866,7 +889,7 @@ function App() {
       <div className="min-h-screen bg-slate-50 flex">
         <div className="hidden md:block w-64 flex-shrink-0"><Sidebar user={user} onLogout={handleLogout} currentView={currentView} onViewChange={handleViewChange} allowedViews={allowedViews} /></div>
         <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-slate-900 text-white p-4 flex justify-between items-center shadow-md print:hidden"><span className="font-bold truncate mr-3">{empresa.nombre}</span><div className="flex items-center gap-3"><Notifications user={user} orders={orders} archivedIds={archivedNotifications} onArchive={handleArchiveNotification} onViewOrder={(o) => handleViewOrder(o, 'tasks')} realtimeEvents={realtimeEvents} onClearEvent={handleClearEvent} onViewChange={(view) => { handleViewChange(view); setIsMobileMenuOpen(false); }} /><button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}><Menu className="h-6 w-6" /></button></div></div>
-        {isMobileMenuOpen && (<div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setIsMobileMenuOpen(false)}><div className="w-64 bg-slate-900 h-full shadow-2xl" onClick={e => e.stopPropagation()}><Sidebar user={user} onLogout={handleLogout} currentView={currentView} onViewChange={(view) => { handleViewChange(view); setIsMobileMenuOpen(false); }} allowedViews={allowedViews} /></div></div>)}
+        {isMobileMenuOpen && (<div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setIsMobileMenuOpen(false)}><div className="w-64 h-full shadow-2xl" style={{ backgroundColor: 'rgb(var(--tema-menu))' }} onClick={e => e.stopPropagation()}><Sidebar user={user} onLogout={handleLogout} currentView={currentView} onViewChange={(view) => { handleViewChange(view); setIsMobileMenuOpen(false); }} allowedViews={allowedViews} /></div></div>)}
         <div className="flex-1 w-full md:w-[calc(100%-16rem)] min-h-screen transition-all duration-300 flex flex-col"><div className="hidden md:flex bg-white border-b border-slate-200 h-16 px-8 items-center justify-end sticky top-0 z-20 shadow-sm print:hidden"><div className="flex items-center gap-4"><Notifications user={user} orders={orders} archivedIds={archivedNotifications} onArchive={handleArchiveNotification} onViewOrder={(o) => handleViewOrder(o, 'tasks')} realtimeEvents={realtimeEvents} onClearEvent={handleClearEvent} onViewChange={handleViewChange} /><div className="h-8 w-[1px] bg-slate-200"></div><span className="text-sm font-semibold text-slate-700">{user.name}</span></div></div><div className="container mx-auto px-4 py-8 md:p-8 mt-12 md:mt-0 flex-1 print:p-0 print:max-w-none print:mt-0">{renderContent()}</div></div>
       </div>
 
